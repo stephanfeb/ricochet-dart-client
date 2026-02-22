@@ -1,0 +1,46 @@
+name: ricochet
+description: Dart client library for the Ricochet P2P store-and-forward messaging network
+version: 0.0.1
+# repository: https://github.com/twostack/ricochet-dart-client
+
+environment:
+  sdk: ^3.5.1
+
+# Add regular dependencies here.
+dependencies:
+  args: ^2.4.2
+  logging: ^1.2.0
+  uuid: ^4.0.0
+  path: ^1.8.3
+  yaml: ^3.1.2
+  http: ^1.2.0
+
+  dart_libp2p:
+    path: /Users/stephanfeb/IdeaProjects/agentic/dart-libp2p
+
+  dart_libp2p_kad_dht: 
+    path: /Users/stephanfeb/IdeaProjects/agentic/dart-libp2p-kad-dht
+
+  dart_libp2p_pubsub:
+    path: /Users/stephanfeb/IdeaProjects/agentic/dart-libp2p-pubsub
+
+  dart_libp2p_merkle_crdt:
+    path: /Users/stephanfeb/IdeaProjects/agentic/dart-libp2p-merkle-crdt
+
+  merkledag:
+    path: /Users/stephanfeb/IdeaProjects/agentic/merkledag
+
+  dcid: ^1.0.0
+  dart_multihash: ^1.0.1
+  cbor: 6.3.5
+
+
+dev_dependencies:
+  lints: ^2.1.0
+  test: ^1.24.0
+  mockito: ^5.4.4 # Or latest version
+  build_runner: ^2.4.11 # Or latest version
+  analyzer: 5.13.0
+
+#  protoc_builder: ^0.4.1
+#  protoc_plugin: ^21.1.2
