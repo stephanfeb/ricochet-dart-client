@@ -11,8 +11,11 @@ import 'package:logging/logging.dart';
 import '../core/sf_message.dart';
 import '../core/message_types.dart';
 import '../protocol/maa/access_handler.dart';
+import '../protocol/sca/collection_handler.dart';
 import '../protocol/sda/document_handler.dart';
+import '../protocol/sfa/feed_handler.dart';
 import '../protocol/mailbox_notify_protocol.dart';
+import '../protocol/stream_utils.dart';
 import '../registry/peer_preferences.dart';
 import '../uri/ricochet_uri.dart';
 import '../uri/ricochet_uri_resolver.dart';
@@ -318,7 +321,7 @@ class SFClient {
   void registerPrivateNotificationHandler() {
     host.setStreamHandler(mailboxNotifyProtocolId, (stream, remotePeer) async {
       try {
-        final data = await stream.read();
+        final data = await StreamUtils.readLengthPrefixedFrame(stream);
         final json = jsonDecode(utf8.decode(data));
         final notification = MailboxNotification.fromJson(json);
         
@@ -1105,6 +1108,831 @@ class SFClient {
       return null;
     } catch (e) {
       _logger.warning('Failed to browse directory: $e');
+      return null;
+    }
+  }
+
+  // ============================================================================
+  // Feed Store Operations (SFA)
+  // ============================================================================
+
+  /// Create a new feed on your store
+  Future<FeedInfo?> createFeed({
+    required String path,
+    required String title,
+    String description = '',
+    PeerId? toServer,
+  }) async {
+    final serverId = toServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for feed creation');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [FeedHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await FeedHandler.createFeed(
+        stream,
+        ownerPeerId: host.id,
+        path: path,
+        title: title,
+        description: description,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      if (!response.isSuccess) {
+        _logger.warning('CREATE feed $path: ${response.status} ${response.error}');
+        return null;
+      }
+
+      final body = jsonDecode(utf8.decode(response.body!)) as Map<String, dynamic>;
+      return FeedInfo(
+        path: body['path'] as String,
+        title: body['title'] as String,
+        description: body['description'] as String? ?? '',
+        currentSequence: body['currentSequence'] as int? ?? 0,
+        createdAt: body['createdAt'] as int? ?? DateTime.now().millisecondsSinceEpoch,
+      );
+    } on TimeoutException {
+      _logger.warning('CREATE feed timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to CREATE feed: $e');
+      return null;
+    }
+  }
+
+  /// Get feed metadata
+  Future<FeedInfo?> getFeed({
+    required PeerId ownerPeerId,
+    required String path,
+    PeerId? fromServer,
+  }) async {
+    final serverId = fromServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for feed retrieval');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [FeedHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await FeedHandler.getFeed(
+        stream,
+        ownerPeerId: ownerPeerId,
+        path: path,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      if (!response.isSuccess) {
+        _logger.warning('GET feed $path: ${response.status} ${response.error}');
+        return null;
+      }
+
+      final body = jsonDecode(utf8.decode(response.body!)) as Map<String, dynamic>;
+      return FeedInfo(
+        path: body['path'] as String? ?? path,
+        title: body['title'] as String? ?? '',
+        description: body['description'] as String? ?? '',
+        currentSequence: body['currentSequence'] as int? ?? 0,
+        lastEntryAt: body['lastEntryAt'] as int?,
+        createdAt: body['createdAt'] as int? ?? 0,
+      );
+    } on TimeoutException {
+      _logger.warning('GET feed timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to GET feed: $e');
+      return null;
+    }
+  }
+
+  /// Delete a feed from your store
+  Future<bool> deleteFeed({
+    required String path,
+    PeerId? toServer,
+  }) async {
+    final serverId = toServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for feed deletion');
+      return false;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [FeedHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await FeedHandler.deleteFeed(
+        stream,
+        ownerPeerId: host.id,
+        path: path,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+      return response.isSuccess;
+    } on TimeoutException {
+      _logger.warning('DELETE feed timed out');
+      return false;
+    } catch (e) {
+      _logger.warning('Failed to DELETE feed: $e');
+      return false;
+    }
+  }
+
+  /// List all feeds for an owner
+  Future<List<FeedInfo>?> listFeeds({
+    required PeerId ownerPeerId,
+    PeerId? fromServer,
+  }) async {
+    final serverId = fromServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for feed listing');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [FeedHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await FeedHandler.listFeeds(
+        stream,
+        ownerPeerId: ownerPeerId,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      if (!response.isSuccess) {
+        _logger.warning('LIST feeds: ${response.status} ${response.error}');
+        return null;
+      }
+
+      final list = jsonDecode(utf8.decode(response.body!)) as List<dynamic>;
+      return list.map((item) {
+        final f = item as Map<String, dynamic>;
+        return FeedInfo(
+          path: f['path'] as String,
+          title: f['title'] as String? ?? '',
+          description: f['description'] as String? ?? '',
+          currentSequence: f['currentSequence'] as int? ?? 0,
+          lastEntryAt: f['lastEntryAt'] as int?,
+          createdAt: f['createdAt'] as int? ?? 0,
+        );
+      }).toList();
+    } on TimeoutException {
+      _logger.warning('LIST feeds timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to LIST feeds: $e');
+      return null;
+    }
+  }
+
+  /// Append an entry to a feed
+  Future<FeedAppendResult?> appendFeedEntry({
+    required String path,
+    required Uint8List content,
+    String? entryType,
+    PeerId? toServer,
+  }) async {
+    final serverId = toServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for feed append');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [FeedHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await FeedHandler.appendFeedEntry(
+        stream,
+        ownerPeerId: host.id,
+        path: path,
+        content: content,
+        entryType: entryType,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      if (!response.isSuccess) {
+        _logger.warning('APPEND feed $path: ${response.status} ${response.error}');
+        return null;
+      }
+
+      return FeedAppendResult(
+        status: response.status,
+        sequence: response.sequence ?? 0,
+        etag: response.etag ?? '',
+      );
+    } on TimeoutException {
+      _logger.warning('APPEND feed timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to APPEND feed: $e');
+      return null;
+    }
+  }
+
+  /// Get a single feed entry by sequence number
+  Future<FeedEntry?> getFeedEntry({
+    required PeerId ownerPeerId,
+    required String path,
+    required int sequenceNumber,
+    PeerId? fromServer,
+  }) async {
+    final serverId = fromServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for feed entry retrieval');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [FeedHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await FeedHandler.getFeedEntry(
+        stream,
+        ownerPeerId: ownerPeerId,
+        path: path,
+        sequenceNumber: sequenceNumber,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      if (!response.isSuccess) {
+        _logger.warning('GET feed entry $path#$sequenceNumber: ${response.status}');
+        return null;
+      }
+
+      return FeedEntry(
+        sequence: response.sequence ?? sequenceNumber,
+        entryType: response.entryType,
+        content: response.body ?? Uint8List(0),
+        contentHash: response.etag ?? '',
+        createdAt: response.headers['Created-At'] as int? ?? 0,
+      );
+    } on TimeoutException {
+      _logger.warning('GET feed entry timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to GET feed entry: $e');
+      return null;
+    }
+  }
+
+  /// Get feed entries (range query)
+  Future<FeedEntriesResult?> getFeedEntries({
+    required PeerId ownerPeerId,
+    required String path,
+    int? fromSequence,
+    int? toSequence,
+    int? limit,
+    String? entryType,
+    PeerId? fromServer,
+  }) async {
+    final serverId = fromServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for feed entries retrieval');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [FeedHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await FeedHandler.getFeedEntries(
+        stream,
+        ownerPeerId: ownerPeerId,
+        path: path,
+        fromSequence: fromSequence,
+        toSequence: toSequence,
+        limit: limit,
+        entryType: entryType,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      if (!response.isSuccess) {
+        _logger.warning('GET feed entries $path: ${response.status}');
+        return null;
+      }
+
+      final body = jsonDecode(utf8.decode(response.body!)) as Map<String, dynamic>;
+      final entriesList = body['entries'] as List<dynamic>? ?? [];
+      final entries = entriesList.map((e) {
+        final entry = e as Map<String, dynamic>;
+        return FeedEntry(
+          sequence: entry['seq'] as int,
+          entryType: entry['type'] as String?,
+          content: Uint8List.fromList(
+            base64Decode(entry['content'] as String? ?? ''),
+          ),
+          contentHash: entry['hash'] as String? ?? '',
+          createdAt: entry['createdAt'] as int? ?? 0,
+        );
+      }).toList();
+
+      return FeedEntriesResult(
+        entries: entries,
+        hasMore: response.hasMore ?? false,
+        nextSequence: response.nextSequence,
+      );
+    } on TimeoutException {
+      _logger.warning('GET feed entries timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to GET feed entries: $e');
+      return null;
+    }
+  }
+
+  // ============================================================================
+  // Collection Store Operations (SCA)
+  // ============================================================================
+
+  /// Create a new collection on your store
+  Future<CollectionInfo?> createCollection({
+    required String path,
+    required String name,
+    PeerId? toServer,
+  }) async {
+    final serverId = toServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for collection creation');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [CollectionHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await CollectionHandler.createCollection(
+        stream,
+        ownerPeerId: host.id,
+        path: path,
+        name: name,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      if (!response.isSuccess) {
+        _logger.warning('CREATE collection $path: ${response.status} ${response.error}');
+        return null;
+      }
+
+      final body = jsonDecode(utf8.decode(response.body!)) as Map<String, dynamic>;
+      return CollectionInfo(
+        path: body['path'] as String,
+        name: body['name'] as String,
+        recordCount: body['recordCount'] as int? ?? 0,
+        createdAt: body['createdAt'] as int? ?? DateTime.now().millisecondsSinceEpoch,
+      );
+    } on TimeoutException {
+      _logger.warning('CREATE collection timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to CREATE collection: $e');
+      return null;
+    }
+  }
+
+  /// Get collection metadata
+  Future<CollectionInfo?> getCollection({
+    required PeerId ownerPeerId,
+    required String path,
+    PeerId? fromServer,
+  }) async {
+    final serverId = fromServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for collection retrieval');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [CollectionHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await CollectionHandler.getCollection(
+        stream,
+        ownerPeerId: ownerPeerId,
+        path: path,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      if (!response.isSuccess) {
+        _logger.warning('GET collection $path: ${response.status} ${response.error}');
+        return null;
+      }
+
+      final body = jsonDecode(utf8.decode(response.body!)) as Map<String, dynamic>;
+      return CollectionInfo(
+        path: body['path'] as String? ?? path,
+        name: body['name'] as String? ?? '',
+        recordCount: body['recordCount'] as int? ?? 0,
+        lastModifiedAt: body['lastModifiedAt'] as int?,
+        createdAt: body['createdAt'] as int? ?? 0,
+      );
+    } on TimeoutException {
+      _logger.warning('GET collection timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to GET collection: $e');
+      return null;
+    }
+  }
+
+  /// Delete a collection from your store
+  Future<bool> deleteCollection({
+    required String path,
+    PeerId? toServer,
+  }) async {
+    final serverId = toServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for collection deletion');
+      return false;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [CollectionHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await CollectionHandler.deleteCollection(
+        stream,
+        ownerPeerId: host.id,
+        path: path,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+      return response.isSuccess;
+    } on TimeoutException {
+      _logger.warning('DELETE collection timed out');
+      return false;
+    } catch (e) {
+      _logger.warning('Failed to DELETE collection: $e');
+      return false;
+    }
+  }
+
+  /// List all collections for an owner
+  Future<List<CollectionInfo>?> listCollections({
+    required PeerId ownerPeerId,
+    PeerId? fromServer,
+  }) async {
+    final serverId = fromServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for collection listing');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [CollectionHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await CollectionHandler.listCollections(
+        stream,
+        ownerPeerId: ownerPeerId,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      if (!response.isSuccess) {
+        _logger.warning('LIST collections: ${response.status} ${response.error}');
+        return null;
+      }
+
+      final list = jsonDecode(utf8.decode(response.body!)) as List<dynamic>;
+      return list.map((item) {
+        final c = item as Map<String, dynamic>;
+        return CollectionInfo(
+          path: c['path'] as String,
+          name: c['name'] as String? ?? '',
+          recordCount: c['recordCount'] as int? ?? 0,
+          lastModifiedAt: c['lastModifiedAt'] as int?,
+          createdAt: c['createdAt'] as int? ?? 0,
+        );
+      }).toList();
+    } on TimeoutException {
+      _logger.warning('LIST collections timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to LIST collections: $e');
+      return null;
+    }
+  }
+
+  /// Put (create or update) a collection item
+  Future<CollectionItemResult?> putCollectionItem({
+    required String path,
+    required String key,
+    required Uint8List content,
+    String? ifMatch,
+    PeerId? toServer,
+  }) async {
+    final serverId = toServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for collection item put');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [CollectionHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await CollectionHandler.putCollectionItem(
+        stream,
+        ownerPeerId: host.id,
+        path: path,
+        key: key,
+        content: content,
+        ifMatch: ifMatch,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      return CollectionItemResult(
+        status: response.status,
+        etag: response.etag,
+        version: response.version,
+        created: response.status == 201,
+      );
+    } on TimeoutException {
+      _logger.warning('PUT collection item timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to PUT collection item: $e');
+      return null;
+    }
+  }
+
+  /// Get a single collection item by key
+  Future<CollectionItem?> getCollectionItem({
+    required PeerId ownerPeerId,
+    required String path,
+    required String key,
+    PeerId? fromServer,
+  }) async {
+    final serverId = fromServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for collection item retrieval');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [CollectionHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await CollectionHandler.getCollectionItem(
+        stream,
+        ownerPeerId: ownerPeerId,
+        path: path,
+        key: key,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      if (!response.isSuccess) {
+        _logger.warning('GET collection item $path/$key: ${response.status}');
+        return null;
+      }
+
+      final content = response.body != null
+          ? jsonDecode(utf8.decode(response.body!)) as Map<String, dynamic>
+          : <String, dynamic>{};
+
+      return CollectionItem(
+        key: key,
+        content: content,
+        contentHash: response.etag ?? '',
+        version: response.version ?? 1,
+        createdAt: response.headers['Created-At'] as int? ?? 0,
+        updatedAt: response.headers['Updated-At'] as int? ?? 0,
+      );
+    } on TimeoutException {
+      _logger.warning('GET collection item timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to GET collection item: $e');
+      return null;
+    }
+  }
+
+  /// Delete a collection item
+  Future<bool> deleteCollectionItem({
+    required String path,
+    required String key,
+    PeerId? toServer,
+  }) async {
+    final serverId = toServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for collection item deletion');
+      return false;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [CollectionHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await CollectionHandler.deleteCollectionItem(
+        stream,
+        ownerPeerId: host.id,
+        path: path,
+        key: key,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+      return response.isSuccess;
+    } on TimeoutException {
+      _logger.warning('DELETE collection item timed out');
+      return false;
+    } catch (e) {
+      _logger.warning('Failed to DELETE collection item: $e');
+      return false;
+    }
+  }
+
+  /// List keys in a collection
+  Future<CollectionKeysResult?> listCollectionKeys({
+    required PeerId ownerPeerId,
+    required String path,
+    int? limit,
+    int? offset,
+    PeerId? fromServer,
+  }) async {
+    final serverId = fromServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for collection keys listing');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [CollectionHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await CollectionHandler.listCollectionKeys(
+        stream,
+        ownerPeerId: ownerPeerId,
+        path: path,
+        limit: limit,
+        offset: offset,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      if (!response.isSuccess) {
+        _logger.warning('LIST collection keys $path: ${response.status}');
+        return null;
+      }
+
+      final body = jsonDecode(utf8.decode(response.body!)) as Map<String, dynamic>;
+      final keys = (body['keys'] as List<dynamic>).cast<String>();
+
+      return CollectionKeysResult(
+        keys: keys,
+        totalCount: response.totalCount ?? keys.length,
+        hasMore: response.hasMore ?? false,
+      );
+    } on TimeoutException {
+      _logger.warning('LIST collection keys timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to LIST collection keys: $e');
+      return null;
+    }
+  }
+
+  /// Query a collection with JSONB filtering
+  Future<CollectionQueryResult?> queryCollection({
+    required PeerId ownerPeerId,
+    required String path,
+    Map<String, dynamic>? filter,
+    String? sortField,
+    bool? sortAsc,
+    int? limit,
+    int? offset,
+    PeerId? fromServer,
+  }) async {
+    final serverId = fromServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for collection query');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [CollectionHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await CollectionHandler.queryCollection(
+        stream,
+        ownerPeerId: ownerPeerId,
+        path: path,
+        filter: filter,
+        sortField: sortField,
+        sortAsc: sortAsc,
+        limit: limit,
+        offset: offset,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      if (!response.isSuccess) {
+        _logger.warning('QUERY collection $path: ${response.status}');
+        return null;
+      }
+
+      final body = jsonDecode(utf8.decode(response.body!)) as Map<String, dynamic>;
+      final itemsList = body['items'] as List<dynamic>? ?? [];
+      final items = itemsList.map((item) {
+        final i = item as Map<String, dynamic>;
+        return CollectionItem(
+          key: i['key'] as String,
+          content: i['content'] as Map<String, dynamic>? ?? {},
+          contentHash: i['hash'] as String? ?? '',
+          version: i['version'] as int? ?? 1,
+          createdAt: i['createdAt'] as int? ?? 0,
+          updatedAt: i['updatedAt'] as int? ?? 0,
+        );
+      }).toList();
+
+      return CollectionQueryResult(
+        items: items,
+        totalCount: response.totalCount ?? items.length,
+        hasMore: response.hasMore ?? false,
+      );
+    } on TimeoutException {
+      _logger.warning('QUERY collection timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to QUERY collection: $e');
       return null;
     }
   }

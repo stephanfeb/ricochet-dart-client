@@ -764,3 +764,156 @@ class DirectoryBrowseResult {
   });
 }
 
+// ============================================================================
+// Feed Store Types
+// ============================================================================
+
+/// Feed metadata from GET/CREATE/LIST operations
+class FeedInfo {
+  final String path;
+  final String title;
+  final String description;
+  final int currentSequence;
+  final int? lastEntryAt;
+  final int createdAt;
+
+  const FeedInfo({
+    required this.path,
+    required this.title,
+    required this.description,
+    required this.currentSequence,
+    this.lastEntryAt,
+    required this.createdAt,
+  });
+}
+
+/// A single feed entry
+class FeedEntry {
+  final int sequence;
+  final String? entryType;
+  final Uint8List content;
+  final String contentHash;
+  final int createdAt;
+
+  const FeedEntry({
+    required this.sequence,
+    this.entryType,
+    required this.content,
+    required this.contentHash,
+    required this.createdAt,
+  });
+}
+
+/// Result from appending a feed entry
+class FeedAppendResult {
+  final int status;
+  final int sequence;
+  final String etag;
+
+  const FeedAppendResult({
+    required this.status,
+    required this.sequence,
+    required this.etag,
+  });
+
+  bool get isSuccess => status == 201;
+}
+
+/// Result from getting feed entries (range query)
+class FeedEntriesResult {
+  final List<FeedEntry> entries;
+  final bool hasMore;
+  final int? nextSequence;
+
+  const FeedEntriesResult({
+    required this.entries,
+    required this.hasMore,
+    this.nextSequence,
+  });
+}
+
+// ============================================================================
+// Collection Store Types
+// ============================================================================
+
+/// Collection metadata from GET/CREATE/LIST operations
+class CollectionInfo {
+  final String path;
+  final String name;
+  final int recordCount;
+  final int? lastModifiedAt;
+  final int createdAt;
+
+  const CollectionInfo({
+    required this.path,
+    required this.name,
+    required this.recordCount,
+    this.lastModifiedAt,
+    required this.createdAt,
+  });
+}
+
+/// A single collection item
+class CollectionItem {
+  final String key;
+  final Map<String, dynamic> content;
+  final String contentHash;
+  final int version;
+  final int createdAt;
+  final int updatedAt;
+
+  const CollectionItem({
+    required this.key,
+    required this.content,
+    required this.contentHash,
+    required this.version,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+}
+
+/// Result from putting a collection item
+class CollectionItemResult {
+  final int status;
+  final String? etag;
+  final int? version;
+  final bool created;
+
+  const CollectionItemResult({
+    required this.status,
+    this.etag,
+    this.version,
+    required this.created,
+  });
+
+  bool get isSuccess => status == 200 || status == 201;
+  bool get isConflict => status == 409;
+  bool get isForbidden => status == 403;
+}
+
+/// Result from querying a collection
+class CollectionQueryResult {
+  final List<CollectionItem> items;
+  final int totalCount;
+  final bool hasMore;
+
+  const CollectionQueryResult({
+    required this.items,
+    required this.totalCount,
+    required this.hasMore,
+  });
+}
+
+/// Result from listing collection keys
+class CollectionKeysResult {
+  final List<String> keys;
+  final int totalCount;
+  final bool hasMore;
+
+  const CollectionKeysResult({
+    required this.keys,
+    required this.totalCount,
+    required this.hasMore,
+  });
+}
+

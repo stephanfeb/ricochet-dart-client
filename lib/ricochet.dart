@@ -82,6 +82,12 @@ export 'core/message_flags.dart';
 export 'protocol/mma/admin_protocol.dart';
 export 'protocol/mma/admin_frame.dart';
 export 'protocol/mailbox_notify_protocol.dart';
+export 'protocol/sda/document_frame.dart';
+export 'protocol/sda/document_handler.dart';
+export 'protocol/sfa/feed_frame.dart';
+export 'protocol/sfa/feed_handler.dart';
+export 'protocol/sca/collection_frame.dart';
+export 'protocol/sca/collection_handler.dart';
 
 // ---------------------------------------------------------------------------
 // Presence

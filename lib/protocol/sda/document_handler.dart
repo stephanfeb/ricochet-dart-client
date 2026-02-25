@@ -28,7 +28,7 @@ class DocumentHandler {
   // ============================================================================
 
   /// Get a document (client-side)
-  static Future<DocumentResponse> getDocument(
+  static Future<DocumentFrameResponse> getDocument(
     P2PStream stream, {
     required PeerId ownerPeerId,
     required String path,
@@ -59,7 +59,7 @@ class DocumentHandler {
   }
 
   /// Put a document (client-side)
-  static Future<DocumentResponse> putDocument(
+  static Future<DocumentFrameResponse> putDocument(
     P2PStream stream, {
     required PeerId ownerPeerId,
     required String path,
@@ -95,7 +95,7 @@ class DocumentHandler {
   }
 
   /// Patch a document (client-side) using JSON Merge Patch
-  static Future<DocumentResponse> patchDocument(
+  static Future<DocumentFrameResponse> patchDocument(
     P2PStream stream, {
     required PeerId ownerPeerId,
     required String path,
@@ -132,7 +132,7 @@ class DocumentHandler {
   }
 
   /// Head a document (client-side)
-  static Future<DocumentResponse> headDocument(
+  static Future<DocumentFrameResponse> headDocument(
     P2PStream stream, {
     required PeerId ownerPeerId,
     required String path,
@@ -156,7 +156,7 @@ class DocumentHandler {
   }
 
   /// Delete a document (client-side)
-  static Future<DocumentResponse> deleteDocument(
+  static Future<DocumentFrameResponse> deleteDocument(
     P2PStream stream, {
     required PeerId ownerPeerId,
     required String path,
@@ -187,7 +187,7 @@ class DocumentHandler {
   }
 
   /// Join server directory (client-side)
-  static Future<DocumentResponse> joinDirectory(
+  static Future<DocumentFrameResponse> joinDirectory(
     P2PStream stream, {
     required PeerId ownerPeerId,
     required String displayName,
@@ -224,7 +224,7 @@ class DocumentHandler {
   }
 
   /// Leave server directory (client-side)
-  static Future<DocumentResponse> leaveDirectory(
+  static Future<DocumentFrameResponse> leaveDirectory(
     P2PStream stream, {
     required PeerId ownerPeerId,
   }) async {
@@ -249,7 +249,7 @@ class DocumentHandler {
   }
 
   /// Browse server directory (client-side)
-  static Future<DocumentResponse> browseDirectory(
+  static Future<DocumentFrameResponse> browseDirectory(
     P2PStream stream, {
     required PeerId ownerPeerId,
     String? cursor,
@@ -280,7 +280,7 @@ class DocumentHandler {
   }
 
   /// List documents (client-side)
-  static Future<DocumentResponse> listDocuments(
+  static Future<DocumentFrameResponse> listDocuments(
     P2PStream stream, {
     required PeerId ownerPeerId,
     String pathPrefix = '',

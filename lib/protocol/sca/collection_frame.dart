@@ -1,16 +1,15 @@
-/// SDA Frame Encoding/Decoding
+/// SCA Frame Encoding/Decoding
 ///
-/// Handles serialization of Store Document Access protocol messages
-/// including GET, PUT, and HEAD operations.
+/// Handles serialization of Store Collection Access protocol messages
+/// including CREATE, GET, PUT, DELETE, LIST, and QUERY operations.
 library;
 
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dart_libp2p/core/peer/peer_id.dart';
-import 'package:logging/logging.dart';
 
-/// Document frame encoding/decoding for SDA protocol
-class DocumentFrame {
+/// Collection frame encoding/decoding for SCA protocol
+class CollectionFrame {
   /// Get operation type from request bytes
   static String getOperation(Uint8List bytes) {
     final json = utf8.decode(bytes);
@@ -22,34 +21,43 @@ class DocumentFrame {
   // Request Encoding/Decoding
   // ============================================================================
 
-  /// Encode document request (GET, PUT, HEAD)
+  /// Encode collection request
   static Uint8List encodeRequest({
     required String operation,
     required PeerId ownerPeerId,
-    required String path,
+    String? path,
+    String? key,
     Map<String, String>? headers,
     Uint8List? body,
+    String? name,
+    Map<String, dynamic>? filter,
+    String? sortField,
+    bool? sortAsc,
+    int? limit,
+    int? offset,
   }) {
     final data = <String, dynamic>{
       'operation': operation,
       'ownerPeerId': ownerPeerId.toString(),
-      'path': path,
     };
 
-    if (headers != null && headers.isNotEmpty) {
-      data['headers'] = headers;
-    }
-
-    if (body != null) {
-      data['body'] = base64Encode(body);
-    }
+    if (path != null) data['path'] = path;
+    if (key != null) data['key'] = key;
+    if (headers != null && headers.isNotEmpty) data['headers'] = headers;
+    if (body != null) data['body'] = base64Encode(body);
+    if (name != null) data['name'] = name;
+    if (filter != null) data['filter'] = filter;
+    if (sortField != null) data['sortField'] = sortField;
+    if (sortAsc != null) data['sortAsc'] = sortAsc;
+    if (limit != null) data['limit'] = limit;
+    if (offset != null) data['offset'] = offset;
 
     final json = jsonEncode(data);
     return Uint8List.fromList(utf8.encode(json));
   }
 
-  /// Decode document request
-  static DocumentRequest decodeRequest(Uint8List bytes) {
+  /// Decode collection request
+  static CollectionRequest decodeRequest(Uint8List bytes) {
     final json = utf8.decode(bytes);
     final data = jsonDecode(json) as Map<String, dynamic>;
 
@@ -61,12 +69,19 @@ class DocumentFrame {
         ? base64Decode(data['body'] as String)
         : null;
 
-    return DocumentRequest(
+    return CollectionRequest(
       operation: data['operation'] as String,
       ownerPeerId: PeerId.fromString(data['ownerPeerId'] as String),
-      path: data['path'] as String,
+      path: data['path'] as String?,
+      key: data['key'] as String?,
       headers: headers,
       body: body,
+      name: data['name'] as String?,
+      filter: data['filter'] as Map<String, dynamic>?,
+      sortField: data['sortField'] as String?,
+      sortAsc: data['sortAsc'] as bool?,
+      limit: data['limit'] as int?,
+      offset: data['offset'] as int?,
     );
   }
 
@@ -74,7 +89,7 @@ class DocumentFrame {
   // Response Encoding/Decoding
   // ============================================================================
 
-  /// Encode document response
+  /// Encode collection response
   static Uint8List encodeResponse({
     required int status,
     Map<String, dynamic>? headers,
@@ -84,21 +99,15 @@ class DocumentFrame {
       'status': status,
     };
 
-    if (headers != null && headers.isNotEmpty) {
-      data['headers'] = headers;
-    }
-
-    if (body != null) {
-      final base64Body = base64Encode(body);
-      data['body'] = base64Body;
-    }
+    if (headers != null && headers.isNotEmpty) data['headers'] = headers;
+    if (body != null) data['body'] = base64Encode(body);
 
     final json = jsonEncode(data);
     return Uint8List.fromList(utf8.encode(json));
   }
 
-  /// Decode document response
-  static DocumentFrameResponse decodeResponse(Uint8List bytes) {
+  /// Decode collection response
+  static CollectionFrameResponse decodeResponse(Uint8List bytes) {
     final json = utf8.decode(bytes);
     final data = jsonDecode(json) as Map<String, dynamic>;
 
@@ -110,7 +119,7 @@ class DocumentFrame {
         ? base64Decode(data['body'] as String)
         : null;
 
-    return DocumentFrameResponse(
+    return CollectionFrameResponse(
       status: data['status'] as int,
       headers: headers,
       body: body,
@@ -126,7 +135,7 @@ class DocumentFrame {
     final data = <String, dynamic>{
       'status': status,
       'headers': {
-        'error': errorMessage,
+        'Error': errorMessage,
       },
     };
 
@@ -135,49 +144,61 @@ class DocumentFrame {
   }
 }
 
-/// Document request wrapper
-class DocumentRequest {
+/// Collection request wrapper
+class CollectionRequest {
   final String operation;
   final PeerId ownerPeerId;
-  final String path;
+  final String? path;
+  final String? key;
   final Map<String, String> headers;
   final Uint8List? body;
+  final String? name;
+  final Map<String, dynamic>? filter;
+  final String? sortField;
+  final bool? sortAsc;
+  final int? limit;
+  final int? offset;
 
-  DocumentRequest({
+  CollectionRequest({
     required this.operation,
     required this.ownerPeerId,
-    required this.path,
+    this.path,
+    this.key,
     required this.headers,
     this.body,
+    this.name,
+    this.filter,
+    this.sortField,
+    this.sortAsc,
+    this.limit,
+    this.offset,
   });
 
-  String? get ifNoneMatch => headers['If-None-Match'];
   String? get ifMatch => headers['If-Match'];
-  String? get contentType => headers['Content-Type'];
 }
 
-/// Document response wrapper
-class DocumentFrameResponse {
+/// Collection response wrapper
+class CollectionFrameResponse {
   final int status;
   final Map<String, dynamic> headers;
   final Uint8List? body;
 
-  DocumentFrameResponse({
+  CollectionFrameResponse({
     required this.status,
     required this.headers,
     this.body,
   });
 
   String? get etag => headers['ETag'] as String?;
-  String? get contentType => headers['Content-Type'] as String?;
-  int? get lastModified => headers['Last-Modified'] as int?;
-  int? get contentLength => headers['Content-Length'] as int?;
-  String? get error => headers['error'] as String?;
+  int? get version => headers['X-Version'] as int?;
+  int? get totalCount => headers['X-Total-Count'] as int?;
+  bool? get hasMore => headers['X-Has-More'] as bool?;
+  int? get recordCount => headers['X-Record-Count'] as int?;
+  String? get error => headers['Error'] as String?;
 
   bool get isSuccess => status >= 200 && status < 300;
-  bool get isNotModified => status == 304;
   bool get isNotFound => status == 404;
-  bool get isConflict => status == 409;
   bool get isForbidden => status == 403;
+  bool get isConflict => status == 409;
+  bool get isTooManyRequests => status == 429;
 }
-
