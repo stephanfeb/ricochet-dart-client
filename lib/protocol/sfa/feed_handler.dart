@@ -29,6 +29,7 @@ class FeedHandler {
     required String path,
     required String title,
     String description = '',
+    bool collaborative = false,
   }) async {
     try {
       final requestBytes = FeedFrame.encodeRequest(
@@ -37,6 +38,7 @@ class FeedHandler {
         path: path,
         title: title,
         description: description,
+        collaborative: collaborative,
       );
 
       await _writeFrameStatic(stream, requestBytes);

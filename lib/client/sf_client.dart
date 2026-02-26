@@ -1121,6 +1121,7 @@ class SFClient {
     required String path,
     required String title,
     String description = '',
+    bool collaborative = false,
     PeerId? toServer,
   }) async {
     final serverId = toServer ?? await _serverSelector.selectServer(config.preferredServers);
@@ -1143,6 +1144,7 @@ class SFClient {
         path: path,
         title: title,
         description: description,
+        collaborative: collaborative,
       ).timeout(config.messageTimeout);
 
       await stream.close();
@@ -1309,10 +1311,13 @@ class SFClient {
   }
 
   /// Append an entry to a feed
+  /// [ownerPeerId] Optional: feed owner's peer ID (for collaborative feeds).
+  /// If omitted, defaults to this client's own peer ID.
   Future<FeedAppendResult?> appendFeedEntry({
     required String path,
     required Uint8List content,
     String? entryType,
+    PeerId? ownerPeerId,
     PeerId? toServer,
   }) async {
     final serverId = toServer ?? await _serverSelector.selectServer(config.preferredServers);
@@ -1329,9 +1334,10 @@ class SFClient {
         context,
       ).timeout(config.connectionTimeout);
 
+      final effectiveOwner = ownerPeerId ?? host.id;
       final response = await FeedHandler.appendFeedEntry(
         stream,
-        ownerPeerId: host.id,
+        ownerPeerId: effectiveOwner,
         path: path,
         content: content,
         entryType: entryType,
@@ -1462,6 +1468,7 @@ class SFClient {
           ),
           contentHash: entry['hash'] as String? ?? '',
           createdAt: entry['createdAt'] as int? ?? 0,
+          createdBy: entry['createdBy'] as String?,
         );
       }).toList();
 

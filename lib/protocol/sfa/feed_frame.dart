@@ -35,6 +35,7 @@ class FeedFrame {
     int? fromSequence,
     int? toSequence,
     int? limit,
+    bool collaborative = false,
   }) {
     final data = <String, dynamic>{
       'operation': operation,
@@ -51,6 +52,7 @@ class FeedFrame {
     if (fromSequence != null) data['fromSequence'] = fromSequence;
     if (toSequence != null) data['toSequence'] = toSequence;
     if (limit != null) data['limit'] = limit;
+    if (collaborative) data['collaborative'] = true;
 
     final json = jsonEncode(data);
     return Uint8List.fromList(utf8.encode(json));
@@ -82,6 +84,7 @@ class FeedFrame {
       fromSequence: data['fromSequence'] as int?,
       toSequence: data['toSequence'] as int?,
       limit: data['limit'] as int?,
+      collaborative: data['collaborative'] as bool? ?? false,
     );
   }
 
@@ -158,6 +161,7 @@ class FeedRequest {
   final int? fromSequence;
   final int? toSequence;
   final int? limit;
+  final bool collaborative;
 
   FeedRequest({
     required this.operation,
@@ -172,6 +176,7 @@ class FeedRequest {
     this.fromSequence,
     this.toSequence,
     this.limit,
+    this.collaborative = false,
   });
 }
 

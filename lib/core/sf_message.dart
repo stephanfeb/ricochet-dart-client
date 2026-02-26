@@ -794,6 +794,7 @@ class FeedEntry {
   final Uint8List content;
   final String contentHash;
   final int createdAt;
+  final String? createdBy;
 
   const FeedEntry({
     required this.sequence,
@@ -801,6 +802,7 @@ class FeedEntry {
     required this.content,
     required this.contentHash,
     required this.createdAt,
+    this.createdBy,
   });
 }
 
