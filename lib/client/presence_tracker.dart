@@ -22,9 +22,20 @@ import '../presence/presence_event.dart';
 class PresenceTracker {
   static final Logger _logger = Logger('PresenceTracker');
 
-  final PubSub pubsub;
+  final PubSub? pubsub;
   final PeerId localPeerId;
   final PresenceCache cache;
+
+  // How server topics are subscribed to: the pubsub's subscribe, or a
+  // stand-in under test.
+  final Subscription Function(String topic) _subscribe;
+
+  // Messages refused because the signer was not the server whose topic they
+  // arrived on, or the payload named a different server.
+  int _rejected = 0;
+
+  /// Messages refused for not being the server's own.
+  int get rejectedMessages => _rejected;
 
   // Subscriptions to server presence topics
   final Map<String, Subscription> _serverSubscriptions = {};
@@ -45,10 +56,20 @@ class PresenceTracker {
       _contactPresenceChanges.stream;
 
   PresenceTracker({
-    required this.pubsub,
+    required PubSub this.pubsub,
     required this.localPeerId,
     PresenceCache? cache,
-  }) : cache = cache ?? PresenceCache(cacheTtl: const Duration(seconds: 90));
+  })  : _subscribe = pubsub.subscribe,
+        cache = cache ?? PresenceCache(cacheTtl: const Duration(seconds: 90));
+
+  /// A tracker fed by [subscribe] instead of a live pubsub, for tests.
+  PresenceTracker.withSubscriber(
+    Subscription Function(String topic) subscribe, {
+    required this.localPeerId,
+    PresenceCache? cache,
+  })  : pubsub = null,
+        _subscribe = subscribe,
+        cache = cache ?? PresenceCache(cacheTtl: const Duration(seconds: 90));
 
   /// Start tracking a contact's presence
   ///
@@ -129,13 +150,15 @@ class PresenceTracker {
   void _subscribeToServer(String topic, String serverStr) {
     _logger.info('Subscribing to presence topic: $topic');
 
-    final subscription = pubsub.subscribe(topic);
+    final subscription = _subscribe(topic);
     _serverSubscriptions[topic] = subscription;
 
     final streamSub = subscription.stream.listen(
       (message) {
         print('[PresenceTracker] 📥 DIAG: Received GossipSub message on topic: $topic (${message.data.length} bytes)');
-        _handlePresenceMessage(message.data, serverStr);
+        // `from` is the publisher whose signature pubsub verified before
+        // delivering; `receivedFrom` is only the neighbour that relayed it.
+        handleMessage(message.from as PeerId, serverStr, message.data as List<int>);
       },
       onError: (e) => print('[PresenceTracker] ❌ DIAG: Subscription error for $topic: $e'),
       onDone: () => print('[PresenceTracker] ⚠️ DIAG: Subscription closed for $topic'),
@@ -150,16 +173,46 @@ class PresenceTracker {
     _logger.info('Unsubscribed from presence topic: $topic');
   }
 
-  void _handlePresenceMessage(List<int> data, String serverStr) {
+  /// Applies a presence message signed by [from] that arrived on the topic
+  /// of the server [serverStr].
+  ///
+  /// The topic is open to any publisher, so only the server the topic
+  /// belongs to may speak on it, and the payload must name that same
+  /// server. Without both checks any peer on the topic could mark a
+  /// contact online or offline, or feed a heartbeat that reconciles every
+  /// tracked contact on that server the wrong way. Same rule as the Go
+  /// server's presence tracker.
+  void handleMessage(PeerId from, String serverStr, List<int> data) {
+    final signer = from.toBase58();
+    if (signer != serverStr) {
+      _rejected++;
+      _logger.warning(
+          'Rejected presence message on ${serverStr.substring(0, 12)}...\'s topic signed by ${signer.substring(0, 12)}...');
+      return;
+    }
     try {
       final json = jsonDecode(utf8.decode(data)) as Map<String, dynamic>;
       final type = json['type'] as String?;
       print('[PresenceTracker] 📋 DIAG: Message type=$type, server=$serverStr, raw keys=${json.keys.toList()}');
 
       if (type == 'presence_event' || type == 'event') {
-        _handlePresenceEvent(PresenceEvent.fromJson(json));
+        final event = PresenceEvent.fromJson(json);
+        if (event.serverId != serverStr) {
+          _rejected++;
+          _logger.warning(
+              'Rejected presence event naming server ${event.serverId} signed by ${serverStr.substring(0, 12)}...');
+          return;
+        }
+        _handlePresenceEvent(event);
       } else if (type == 'presence_heartbeat' || type == 'heartbeat') {
-        _handleHeartbeat(PresenceHeartbeat.fromJson(json));
+        final heartbeat = PresenceHeartbeat.fromJson(json);
+        if (heartbeat.serverId != serverStr) {
+          _rejected++;
+          _logger.warning(
+              'Rejected presence heartbeat naming server ${heartbeat.serverId} signed by ${serverStr.substring(0, 12)}...');
+          return;
+        }
+        _handleHeartbeat(heartbeat);
       } else {
         print('[PresenceTracker] ⚠️ DIAG: Unknown message type: $type, raw=$json');
       }

@@ -44,3 +44,10 @@ dev_dependencies:
 
 #  protoc_builder: ^0.4.1
 #  protoc_plugin: ^21.1.2
+
+# The sibling packages disagree on where dart_udx comes from (dart_libp2p and
+# dart_libp2p_pubsub take the local checkout, dart_libp2p_kad_dht the hosted
+# release); overnode_v2 settles it the same way.
+dependency_overrides:
+  dart_udx:
+    path: ../dart-udx
