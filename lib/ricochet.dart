@@ -88,6 +88,12 @@ export 'protocol/sfa/feed_frame.dart';
 export 'protocol/sfa/feed_handler.dart';
 export 'protocol/sca/collection_frame.dart';
 export 'protocol/sca/collection_handler.dart';
+export 'protocol/overmedia/overmedia_frame.dart';
+export 'protocol/overmedia/token_handler.dart';
+export 'protocol/overmedia/room_handler.dart';
+export 'protocol/overmedia/session_handler.dart';
+export 'protocol/overmedia/discovery_handler.dart';
+export 'protocol/overmedia/recording_handler.dart';
 
 // ---------------------------------------------------------------------------
 // Presence
