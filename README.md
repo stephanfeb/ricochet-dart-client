@@ -92,6 +92,36 @@ final publicMessages = await client.retrieveMessages(
 );
 ```
 
+### Encrypt the payload
+
+Off by default. Build the client with a `PayloadEncryptor` from the identity's
+Ed25519 seed and pass `encrypt: true`; the payload is sealed with NaCl box
+(X25519 from the two identity keys, XSalsa20-Poly1305) in the same format the
+Go client uses, so either client can read what the other sent. The ciphertext
+is bound to the recipient, folder and message id, and `retrieveMessages`
+refuses one the server moved or relabelled. Retrieval opens sealed messages
+automatically; without an encryptor an encrypted message fails retrieval with
+a `PayloadDecryptException` that names this layer, so an application running
+its own end-to-end layer above can tell the two apart.
+
+```dart
+final client = SFClient(
+  host: host,
+  config: config,
+  encryptor: PayloadEncryptor.fromEd25519Seed(identitySeed), // 32 bytes
+);
+
+await client.sendMessage(
+  recipient: recipientPeerId,
+  payload: utf8.encode('Hello!'),
+  encrypt: true,
+);
+```
+
+This layer has no forward secrecy (one static key pair per identity; a
+ratchet belongs above it) and does not detect a replay of the same ciphertext
+into the same folder.
+
 ### IMAP-style flag operations
 
 ```dart

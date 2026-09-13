@@ -22,6 +22,8 @@ import '../uri/ricochet_uri_resolver.dart';
 import 'sf_client_config.dart';
 import 'server_selector.dart';
 import 'message_sender.dart';
+import '../crypto/payload_encryption.dart';
+import 'package:uuid/uuid.dart';
 import 'mailbox_manager.dart';
 import 'presence_tracker.dart';
 import '../presence/presence_cache.dart';
@@ -39,6 +41,13 @@ class SFClient {
   final Host host;
   final SFClientConfig config;
   final PubSub? pubsub;
+
+  /// Seals and opens payloads with this identity's key. Without one,
+  /// `sendMessage(encrypt: true)` is an error and an encrypted message
+  /// cannot be retrieved.
+  final PayloadEncryptor? encryptor;
+
+  static final _uuid = Uuid();
   
   late final ServerSelector _serverSelector;
   late final MessageSender _messageSender;
@@ -60,6 +69,7 @@ class SFClient {
     required this.host,
     required this.config,
     this.pubsub,
+    this.encryptor,
   }) {
     if (!config.isValid()) {
       throw ArgumentError('Invalid client configuration');
@@ -140,9 +150,28 @@ class SFClient {
     Duration? expiry,
     bool persistent = false,  // Keep after reading
     bool tryDirectFirst = false, // Set to true to try direct delivery first
+    bool encrypt = false, // Seal the payload for the recipient (needs an encryptor)
   }) async {
     _logger.fine('Sending message to ${recipient.toString().substring(0, 12)}... (folder: ${folderPath ?? 'inbox'})');
-    
+
+    // Sealing binds the ciphertext to the message id, so the id is minted
+    // here rather than at submission.
+    String? messageId;
+    var flags = SFMessageFlags.none;
+    if (encrypt) {
+      final enc = encryptor;
+      if (enc == null) {
+        throw StateError('encrypt: true needs an SFClient built with a PayloadEncryptor');
+      }
+      messageId = _uuid.v4();
+      payload = await enc.encryptBound(
+        payload,
+        PayloadBinding.forMessage(recipientPeerId: recipient, folderPath: folderPath, messageId: messageId),
+        recipient,
+      );
+      flags = flags.withFlag(SFMessageFlags.encrypted);
+    }
+
     final result = await _messageSender.sendMessage(
       recipient: recipient,
       payload: payload,
@@ -151,6 +180,8 @@ class SFClient {
       expiry: expiry,
       persistent: persistent,
       tryDirectFirst: tryDirectFirst,
+      messageId: messageId,
+      flags: flags,
     );
     
     _logger.info('Send result: $result');
@@ -229,12 +260,19 @@ class SFClient {
         _logger.info('✅ [SFClient] Message $i: ID=${msg.messageId.substring(0, 8)}, Folder=${msg.folderPath ?? "null"}');
       }
       
-      // Emit to incoming messages stream
+      // Open sealed payloads against the envelope each message arrived in,
+      // so a ciphertext the server moved or relabelled is refused.
+      final messages = <SFMessage>[];
       for (final message in response.messages) {
+        messages.add(await openIfEncrypted(message, encryptor));
+      }
+
+      // Emit to incoming messages stream
+      for (final message in messages) {
         _incomingMessagesController.add(message);
       }
-      
-      return response.messages;
+
+      return messages;
       
     } on TimeoutException {
       _logger.warning('Retrieval timed out');

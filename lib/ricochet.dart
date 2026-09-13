@@ -71,6 +71,7 @@ export 'client/presence_tracker.dart';
 // Core types
 // ---------------------------------------------------------------------------
 export 'core/sf_message.dart';
+export 'crypto/payload_encryption.dart';
 export 'core/mailbox_address.dart';
 export 'core/mailbox_types.dart';
 export 'core/message_types.dart';

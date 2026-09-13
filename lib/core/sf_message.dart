@@ -143,6 +143,26 @@ class SFMessage {
     );
   }
   
+  /// Create a copy with a different payload (and, optionally, flags): the
+  /// sealed or opened form of the same message.
+  SFMessage withPayload(Uint8List newPayload, {SFMessageFlags? flags}) {
+    return SFMessage(
+      messageId: messageId,
+      recipientPeerId: recipientPeerId,
+      senderPeerId: senderPeerId,
+      payload: newPayload,
+      priority: priority,
+      expiryTimestamp: expiryTimestamp,
+      hopCount: hopCount,
+      flags: flags ?? this.flags,
+      createdTimestamp: createdTimestamp,
+      folderPath: folderPath,
+      sequenceNumber: sequenceNumber,
+      messageFlags: messageFlags,
+      persistent: persistent,
+    );
+  }
+
   /// Create a copy with updated flags
   SFMessage withFlags(SFMessageFlags newFlags) {
     return SFMessage(

@@ -38,10 +38,14 @@ class SubmissionHandler {
     Duration? expiry,
     String? folderPath,
     bool persistent = false,
+    String? messageId,
+    SFMessageFlags flags = SFMessageFlags.none,
   }) async {
     try {
+      // A caller that sealed the payload to a message id supplies that id;
+      // otherwise one is minted here.
       final message = SFMessage.withDefaultExpiry(
-        messageId: _uuid.v4(),
+        messageId: messageId ?? _uuid.v4(),
         recipientPeerId: recipientPeerId,
         senderPeerId: stream.conn.localPeer,
         payload: payload,
@@ -60,7 +64,7 @@ class SubmissionHandler {
             ? DateTime.now().add(expiry).millisecondsSinceEpoch
             : message.expiryTimestamp,
         hopCount: message.hopCount,
-        flags: message.flags,
+        flags: message.flags.withFlag(flags.value),
         createdTimestamp: message.createdTimestamp,
         folderPath: folderPath,
         persistent: persistent,

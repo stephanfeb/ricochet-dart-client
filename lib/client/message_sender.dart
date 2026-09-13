@@ -91,6 +91,8 @@ class MessageSender {
     Duration? expiry,
     bool persistent = false,  // Keep after reading
     bool tryDirectFirst = true,
+    String? messageId,
+    SFMessageFlags flags = SFMessageFlags.none,
   }) async {
     _sendAttempts++;
     
@@ -119,6 +121,8 @@ class MessageSender {
       expiry,
       folderPath: folderPath,
       persistent: persistent,
+      messageId: messageId,
+      flags: flags,
     );
     
     if (sfResult.success) {
@@ -153,6 +157,8 @@ class MessageSender {
     Duration? expiry, {
     String? folderPath,
     bool persistent = false,
+    String? messageId,
+    SFMessageFlags flags = SFMessageFlags.none,
   }) async {
     int attempt = 0;
     Duration retryDelay = config.initialRetryDelay;
@@ -184,6 +190,8 @@ class MessageSender {
           expiry,
           folderPath: folderPath,
           persistent: persistent,
+          messageId: messageId,
+          flags: flags,
         );
         
         return result;
@@ -214,6 +222,8 @@ class MessageSender {
     Duration? expiry, {
     String? folderPath,
     bool persistent = false,
+    String? messageId,
+    SFMessageFlags flags = SFMessageFlags.none,
   }) async {
     _logger.info('Sending via server: ${serverId.toString().substring(0, 12)}...');
     
@@ -235,6 +245,8 @@ class MessageSender {
         expiry: expiry,
         folderPath: folderPath,
         persistent: persistent,
+        messageId: messageId,
+        flags: flags,
       ).timeout(config.messageTimeout);
       
       if (ack.success) {

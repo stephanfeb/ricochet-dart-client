@@ -33,6 +33,7 @@ dependencies:
   dcid: ^1.0.0
   dart_multihash: ^1.0.1
   cbor: 6.3.5
+  pinenacl: ^0.6.0
 
 
 dev_dependencies:
