@@ -106,7 +106,9 @@ class SFClient {
         pubsub: pubsub!,
         localPeerId: host.id,
       );
-      _logger.info('Presence tracker initialized');
+      print('[SFClient] ✅ DIAG: PresenceTracker created with PubSub (${pubsub.runtimeType})');
+    } else {
+      print('[SFClient] ⚠️ DIAG: PubSub is NULL — PresenceTracker NOT created');
     }
 
     if (config.enableAutoRetrieval) {

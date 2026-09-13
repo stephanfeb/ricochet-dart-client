@@ -62,12 +62,12 @@ class PresenceTracker {
 
     // Subscribe to this server's presence topic if not already
     final topic = '/sf-network/presence/${serverPeerId.toBase58()}';
+    print('[PresenceTracker] 📌 DIAG: trackContact contact=${contactStr.substring(0, 16)}... server=${serverStr.substring(0, 12)}... topic=$topic alreadySubscribed=${_serverSubscriptions.containsKey(topic)}');
     if (!_serverSubscriptions.containsKey(topic)) {
       _subscribeToServer(topic, serverStr);
     }
 
-    _logger.fine('Tracking contact ${contactStr.substring(0, 12)}... '
-        'on server ${serverStr.substring(0, 12)}...');
+    print('[PresenceTracker] 📌 DIAG: Now tracking ${_contactServerMap.length} contacts, ${_serverSubscriptions.length} server subscriptions');
   }
 
   /// Stop tracking a contact's presence
@@ -134,11 +134,11 @@ class PresenceTracker {
 
     final streamSub = subscription.stream.listen(
       (message) {
-        _logger.info('Received presence message on topic: $topic (${message.data.length} bytes)');
+        print('[PresenceTracker] 📥 DIAG: Received GossipSub message on topic: $topic (${message.data.length} bytes)');
         _handlePresenceMessage(message.data, serverStr);
       },
-      onError: (e) => _logger.warning('Presence subscription error for $topic: $e'),
-      onDone: () => _logger.warning('Presence subscription closed for $topic'),
+      onError: (e) => print('[PresenceTracker] ❌ DIAG: Subscription error for $topic: $e'),
+      onDone: () => print('[PresenceTracker] ⚠️ DIAG: Subscription closed for $topic'),
     );
     _streamSubscriptions[topic] = streamSub;
   }
@@ -154,19 +154,26 @@ class PresenceTracker {
     try {
       final json = jsonDecode(utf8.decode(data)) as Map<String, dynamic>;
       final type = json['type'] as String?;
+      print('[PresenceTracker] 📋 DIAG: Message type=$type, server=$serverStr, raw keys=${json.keys.toList()}');
 
       if (type == 'presence_event' || type == 'event') {
         _handlePresenceEvent(PresenceEvent.fromJson(json));
       } else if (type == 'presence_heartbeat' || type == 'heartbeat') {
         _handleHeartbeat(PresenceHeartbeat.fromJson(json));
+      } else {
+        print('[PresenceTracker] ⚠️ DIAG: Unknown message type: $type, raw=$json');
       }
-    } catch (e) {
-      _logger.warning('Failed to parse presence message: $e');
+    } catch (e, st) {
+      print('[PresenceTracker] ❌ DIAG: Failed to parse presence message: $e');
+      print('[PresenceTracker] ❌ DIAG: Raw JSON was: ${utf8.decode(data)}');
+      print('[PresenceTracker] ❌ DIAG: Stack: $st');
     }
   }
 
   void _handlePresenceEvent(PresenceEvent event) {
+    print('[PresenceTracker] 🔍 DIAG: presence_event with ${event.changes.length} changes. Tracked contacts: ${_contactServerMap.keys.map((k) => k.substring(0, 12)).toList()}');
     for (final change in event.changes) {
+      print('[PresenceTracker] 🔍 DIAG: Change peerId=${change.peerId.substring(0, 16)}... state=${change.state.name} — tracked=${_contactServerMap.containsKey(change.peerId)}');
       // Only process changes for tracked contacts
       if (!_contactServerMap.containsKey(change.peerId)) continue;
 
@@ -183,20 +190,21 @@ class PresenceTracker {
       }
 
       // Emit to application
+      print('[PresenceTracker] ✅ DIAG: Emitting presence change for ${change.peerId.substring(0, 12)}... → ${change.state.name}');
       _contactPresenceChanges.add(change);
-
-      _logger.fine('Contact ${change.peerId.substring(0, 12)}... '
-          'is now ${change.state.name}');
     }
   }
 
   void _handleHeartbeat(PresenceHeartbeat heartbeat) {
+    print('[PresenceTracker] 💓 DIAG: Heartbeat from server=${heartbeat.serverId.substring(0, 12)}... onlineCount=${heartbeat.onlineCount} onlinePeers=${heartbeat.onlinePeerIds.map((p) => p.substring(0, 12)).toList()} seq=${heartbeat.heartbeatSequence} page=${heartbeat.page + 1}/${heartbeat.pageCount}');
+
     // A paged heartbeat is applied only once every page of its sequence
     // has arrived; a single page is not the whole online set.
     final onlineSet = _heartbeats.add(heartbeat);
     if (onlineSet == null) {
       return;
     }
+    print('[PresenceTracker] 💓 DIAG: Tracked contacts: ${_contactServerMap.entries.map((e) => "${e.key.substring(0, 12)}→${e.value.substring(0, 12)}").toList()}');
 
     // Reconcile tracked contacts against heartbeat
     for (final entry in _contactServerMap.entries) {
