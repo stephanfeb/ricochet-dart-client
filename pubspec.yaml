@@ -18,7 +18,7 @@ dependencies:
   dart_libp2p:
     path: /Users/stephanfeb/IdeaProjects/agentic/dart-libp2p
 
-  dart_libp2p_kad_dht: 
+  dart_libp2p_kad_dht:
     path: /Users/stephanfeb/IdeaProjects/agentic/dart-libp2p-kad-dht
 
   dart_libp2p_pubsub:

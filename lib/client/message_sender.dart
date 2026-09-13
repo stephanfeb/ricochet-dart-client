@@ -4,8 +4,6 @@ import 'package:dart_libp2p/core/host/host.dart';
 import 'package:dart_libp2p/core/peer/peer_id.dart';
 import 'package:dart_libp2p/core/network/context.dart';
 import 'package:logging/logging.dart';
-import 'package:uuid/uuid.dart';
-import '../core/sf_message.dart';
 import '../core/message_types.dart';
 import '../protocol/msa/submission_handler.dart';
 import 'sf_client_config.dart';
@@ -66,7 +64,6 @@ class SendResult {
 /// Handles message sending with retries and failover
 class MessageSender {
   static final Logger _logger = Logger('MessageSender');
-  static final _uuid = Uuid();
   
   final Host host;
   final SFClientConfig config;
@@ -143,59 +140,9 @@ class MessageSender {
     String? folderPath,
     bool persistent = false,
   }) async {
-    try {
-      _logger.fine('Attempting direct delivery to ${recipient.toString().substring(0, 12)}...');
-      
-      // Try to open stream to recipient using MSA (Mail Submission Agent) protocol
-      final context = Context();
-      final stream = await host.newStream(
-        recipient,
-        [SubmissionHandler.protocolId],
-        context,
-      ).timeout(config.connectionTimeout);
-      
-      // Create message with new fields
-      final baseMessage = SFMessage.withDefaultExpiry(
-        messageId: _uuid.v4(),
-        recipientPeerId: recipient,
-        senderPeerId: host.id,
-        payload: payload,
-        priority: priority,
-        persistent: persistent,
-      );
-      
-      final message = SFMessage(
-        messageId: baseMessage.messageId,
-        recipientPeerId: baseMessage.recipientPeerId,
-        senderPeerId: baseMessage.senderPeerId,
-        payload: baseMessage.payload,
-        priority: baseMessage.priority,
-        expiryTimestamp: baseMessage.expiryTimestamp,
-        hopCount: baseMessage.hopCount,
-        flags: baseMessage.flags,
-        createdTimestamp: baseMessage.createdTimestamp,
-        folderPath: folderPath,
-        persistent: persistent,
-      );
-      
-      // Send directly (would need to implement direct protocol)
-      // For now, this is a placeholder - direct delivery not yet implemented
-      await stream.close();
-      
-      _logger.info('Direct delivery successful');
-      
-      return SendResult.success(
-        deliveredDirectly: true,
-        messageId: message.messageId,
-      );
-      
-    } on TimeoutException {
-      _logger.fine('Direct delivery timed out');
-      return SendResult.failure('Direct delivery timeout');
-    } catch (e) {
-      _logger.fine('Direct delivery failed: $e');
-      return SendResult.failure('Direct delivery failed: $e');
-    }
+    // Direct delivery not yet implemented — fall through to S&F
+    _logger.fine('Direct delivery not implemented, skipping to S&F');
+    return SendResult.failure('Direct delivery not implemented');
   }
   
   /// Send via S&F server with retry logic
