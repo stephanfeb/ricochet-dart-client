@@ -174,6 +174,25 @@ class FeedHandler {
     }
   }
 
+  /// Batch get entries from multiple feeds in a single request
+  static Future<FeedFrameResponse> batchGetFeedEntries(
+    P2PStream stream, {
+    required List<Map<String, dynamic>> batchQueries,
+  }) async {
+    try {
+      final requestBytes = FeedFrame.encodeBatchGetRequest(
+        batchQueries: batchQueries,
+      );
+
+      await _writeFrameStatic(stream, requestBytes);
+      final responseBytes = await _readFrameStatic(stream);
+      return FeedFrame.decodeResponse(responseBytes);
+    } catch (e, stackTrace) {
+      _logger.severe('Error batch getting feed entries: $e', e, stackTrace);
+      rethrow;
+    }
+  }
+
   /// List all feeds for an owner
   static Future<FeedFrameResponse> listFeeds(
     P2PStream stream, {

@@ -834,6 +834,27 @@ class FeedEntriesResult {
   });
 }
 
+/// Result for a single feed within a batch feed retrieval
+class BatchFeedResult {
+  final List<FeedEntry> entries;
+  final bool hasMore;
+  final String? error;
+
+  const BatchFeedResult({
+    required this.entries,
+    required this.hasMore,
+    this.error,
+  });
+}
+
+/// Result from batch getting entries across multiple feeds
+class BatchFeedEntriesResult {
+  /// Results keyed by "ownerPeerId/path"
+  final Map<String, BatchFeedResult> feeds;
+
+  const BatchFeedEntriesResult({required this.feeds});
+}
+
 // ============================================================================
 // Collection Store Types
 // ============================================================================

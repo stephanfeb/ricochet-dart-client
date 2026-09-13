@@ -58,6 +58,19 @@ class FeedFrame {
     return Uint8List.fromList(utf8.encode(json));
   }
 
+  /// Encode a BATCH_GET feed request
+  static Uint8List encodeBatchGetRequest({
+    required List<Map<String, dynamic>> batchQueries,
+  }) {
+    final data = <String, dynamic>{
+      'operation': 'BATCH_GET',
+      'batchQueries': batchQueries,
+    };
+
+    final json = jsonEncode(data);
+    return Uint8List.fromList(utf8.encode(json));
+  }
+
   /// Decode feed request
   static FeedRequest decodeRequest(Uint8List bytes) {
     final json = utf8.decode(bytes);
