@@ -98,6 +98,7 @@ export 'protocol/overmedia/recording_handler.dart';
 // ---------------------------------------------------------------------------
 // Presence
 // ---------------------------------------------------------------------------
+export 'presence/heartbeat_assembler.dart';
 export 'presence/presence_cache.dart';
 export 'presence/presence_event.dart';
 

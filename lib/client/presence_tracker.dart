@@ -11,6 +11,7 @@ import 'package:dart_libp2p/core/peer/peer_id.dart';
 import 'package:dart_libp2p_pubsub/dart_libp2p_pubsub.dart';
 import 'package:logging/logging.dart';
 
+import '../presence/heartbeat_assembler.dart';
 import '../presence/presence_cache.dart';
 import '../presence/presence_event.dart';
 
@@ -31,6 +32,9 @@ class PresenceTracker {
 
   // Contact -> server mapping
   final Map<String, String> _contactServerMap = {}; // peerId -> serverId
+
+  // Pages of a multi-page heartbeat received so far, per server
+  final HeartbeatAssembler _heartbeats = HeartbeatAssembler();
 
   // Event stream for application layer
   final StreamController<PresenceChange> _contactPresenceChanges =
@@ -142,6 +146,7 @@ class PresenceTracker {
   Future<void> _unsubscribeFromServer(String topic) async {
     await _streamSubscriptions.remove(topic)?.cancel();
     await _serverSubscriptions.remove(topic)?.cancel();
+    _heartbeats.forget(topic.substring(topic.lastIndexOf('/') + 1));
     _logger.info('Unsubscribed from presence topic: $topic');
   }
 
@@ -150,9 +155,9 @@ class PresenceTracker {
       final json = jsonDecode(utf8.decode(data)) as Map<String, dynamic>;
       final type = json['type'] as String?;
 
-      if (type == 'presence_event') {
+      if (type == 'presence_event' || type == 'event') {
         _handlePresenceEvent(PresenceEvent.fromJson(json));
-      } else if (type == 'presence_heartbeat') {
+      } else if (type == 'presence_heartbeat' || type == 'heartbeat') {
         _handleHeartbeat(PresenceHeartbeat.fromJson(json));
       }
     } catch (e) {
@@ -186,7 +191,12 @@ class PresenceTracker {
   }
 
   void _handleHeartbeat(PresenceHeartbeat heartbeat) {
-    final onlineSet = heartbeat.onlinePeerIds.toSet();
+    // A paged heartbeat is applied only once every page of its sequence
+    // has arrived; a single page is not the whole online set.
+    final onlineSet = _heartbeats.add(heartbeat);
+    if (onlineSet == null) {
+      return;
+    }
 
     // Reconcile tracked contacts against heartbeat
     for (final entry in _contactServerMap.entries) {
