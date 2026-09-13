@@ -1335,6 +1335,7 @@ class SFClient {
       ).timeout(config.connectionTimeout);
 
       final effectiveOwner = ownerPeerId ?? host.id;
+      _logger.info('APPEND feed $path owner=$effectiveOwner caller=${host.id} (ownerPeerId param ${ownerPeerId != null ? "provided" : "NULL/defaulting to self"})');
       final response = await FeedHandler.appendFeedEntry(
         stream,
         ownerPeerId: effectiveOwner,
@@ -1346,7 +1347,7 @@ class SFClient {
       await stream.close();
 
       if (!response.isSuccess) {
-        _logger.warning('APPEND feed $path: ${response.status} ${response.error}');
+        _logger.warning('APPEND feed $path owner=$effectiveOwner: ${response.status} ${response.error}');
         return null;
       }
 
@@ -1482,6 +1483,77 @@ class SFClient {
       return null;
     } catch (e) {
       _logger.warning('Failed to GET feed entries: $e');
+      return null;
+    }
+  }
+
+  /// Batch get feed entries from multiple feeds in a single request.
+  /// Each query is a map with keys: ownerPeerId, path, fromSequence (optional), limit (optional).
+  /// Returns results keyed by "ownerPeerId/path".
+  Future<BatchFeedEntriesResult?> batchGetFeedEntries({
+    required List<Map<String, dynamic>> queries,
+    PeerId? fromServer,
+  }) async {
+    final serverId = fromServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for batch feed entries retrieval');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [FeedHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await FeedHandler.batchGetFeedEntries(
+        stream,
+        batchQueries: queries,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      if (!response.isSuccess) {
+        _logger.warning('BATCH_GET feed entries: ${response.status}');
+        return null;
+      }
+
+      final body = jsonDecode(utf8.decode(response.body!)) as Map<String, dynamic>;
+      final feedsRaw = body['feeds'] as Map<String, dynamic>? ?? {};
+
+      final feeds = <String, BatchFeedResult>{};
+      for (final entry in feedsRaw.entries) {
+        final feedData = entry.value as Map<String, dynamic>;
+        final entriesList = feedData['entries'] as List<dynamic>? ?? [];
+        final entries = entriesList.map((e) {
+          final entryMap = e as Map<String, dynamic>;
+          return FeedEntry(
+            sequence: entryMap['seq'] as int,
+            entryType: entryMap['type'] as String?,
+            content: Uint8List.fromList(
+              base64Decode(entryMap['content'] as String? ?? ''),
+            ),
+            contentHash: entryMap['hash'] as String? ?? '',
+            createdAt: entryMap['createdAt'] as int? ?? 0,
+            createdBy: entryMap['createdBy'] as String?,
+          );
+        }).toList();
+
+        feeds[entry.key] = BatchFeedResult(
+          entries: entries,
+          hasMore: feedData['hasMore'] as bool? ?? false,
+          error: feedData['error'] as String?,
+        );
+      }
+
+      return BatchFeedEntriesResult(feeds: feeds);
+    } on TimeoutException {
+      _logger.warning('BATCH_GET feed entries timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to BATCH_GET feed entries: $e');
       return null;
     }
   }
