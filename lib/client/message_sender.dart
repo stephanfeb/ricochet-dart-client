@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:dart_libp2p/core/host/host.dart';
 import 'package:dart_libp2p/core/peer/peer_id.dart';
 import 'package:dart_libp2p/core/network/context.dart';
+import 'package:dart_libp2p/core/network/stream.dart';
 import 'package:logging/logging.dart';
 import '../core/message_types.dart';
 import '../protocol/msa/submission_handler.dart';
@@ -227,10 +228,11 @@ class MessageSender {
   }) async {
     _logger.info('Sending via server: ${serverId.toString().substring(0, 12)}...');
     
+    P2PStream? stream;
     try {
       // Open stream to S&F server using MSA (Mail Submission Agent) protocol
       final context = Context();
-      final stream = await host.newStream(
+      stream = await host.newStream(
         serverId,
         [SubmissionHandler.protocolId],
         context,
@@ -272,6 +274,17 @@ class MessageSender {
       throw Exception('Operation timed out');
     } catch (e) {
       throw Exception('Failed to send via server: $e');
+    } finally {
+      // The stream is closed on every path: a stream left open holds a slot
+      // on the connection for as long as the session lives, and a sender that
+      // never closes one runs the connection out of slots.
+      if (stream != null && !stream.isClosed) {
+        try {
+          await stream.close();
+        } catch (e) {
+          _logger.fine('Error closing stream: $e');
+        }
+      }
     }
   }
   

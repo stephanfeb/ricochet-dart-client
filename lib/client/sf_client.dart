@@ -264,7 +264,18 @@ class SFClient {
       // so a ciphertext the server moved or relabelled is refused.
       final messages = <SFMessage>[];
       for (final message in response.messages) {
-        messages.add(await openIfEncrypted(message, encryptor));
+        try {
+          messages.add(await openIfEncrypted(message, encryptor));
+        } catch (e) {
+          // A payload that does not open is returned sealed rather than
+          // dropped: the caller still sees the message, and can delete it or
+          // pass it on. Failing the loop instead would cost the caller every
+          // other message in the batch, so one unopenable ciphertext (from a
+          // sender using the wrong key, say) would stall the mailbox.
+          _logger.warning(
+              'message ${message.messageId} did not open, returning it sealed: $e');
+          messages.add(message);
+        }
       }
 
       // Emit to incoming messages stream
@@ -446,10 +457,11 @@ class SFClient {
       return null;
     }
     
+    P2PStream? stream;
     try {
       // Use MAA (Mail Access Agent) protocol for IMAP-style operations
       final context = Context();
-      final stream = await host.newStream(
+      stream = await host.newStream(
         serverId,
         [AccessHandler.protocolId],
         context,
@@ -470,6 +482,16 @@ class SFClient {
     } catch (e) {
       _logger.warning('Failed to mark messages delivered: $e');
       return null;
+    } finally {
+      // The stream is closed on every path: a stream left open holds a slot
+      // on the connection for as long as the session lives.
+      if (stream != null && !stream.isClosed) {
+        try {
+          await stream.close();
+        } catch (e) {
+          _logger.fine('Error closing stream: $e');
+        }
+      }
     }
   }
   
@@ -495,10 +517,11 @@ class SFClient {
       return null;
     }
     
+    P2PStream? stream;
     try {
       // Use MAA (Mail Access Agent) protocol for IMAP-style operations
       final context = Context();
-      final stream = await host.newStream(
+      stream = await host.newStream(
         serverId,
         [AccessHandler.protocolId],
         context,
@@ -520,6 +543,16 @@ class SFClient {
     } catch (e) {
       _logger.warning('Failed to update flags: $e');
       return null;
+    } finally {
+      // The stream is closed on every path: a stream left open holds a slot
+      // on the connection for as long as the session lives.
+      if (stream != null && !stream.isClosed) {
+        try {
+          await stream.close();
+        } catch (e) {
+          _logger.fine('Error closing stream: $e');
+        }
+      }
     }
   }
   
@@ -541,10 +574,11 @@ class SFClient {
       return null;
     }
     
+    P2PStream? stream;
     try {
       // Use MAA (Mail Access Agent) protocol for IMAP-style operations
       final context = Context();
-      final stream = await host.newStream(
+      stream = await host.newStream(
         serverId,
         [AccessHandler.protocolId],
         context,
@@ -565,6 +599,16 @@ class SFClient {
     } catch (e) {
       _logger.warning('Failed to expunge: $e');
       return null;
+    } finally {
+      // The stream is closed on every path: a stream left open holds a slot
+      // on the connection for as long as the session lives.
+      if (stream != null && !stream.isClosed) {
+        try {
+          await stream.close();
+        } catch (e) {
+          _logger.fine('Error closing stream: $e');
+        }
+      }
     }
   }
   
@@ -586,10 +630,11 @@ class SFClient {
       return null;
     }
     
+    P2PStream? stream;
     try {
       // Use MAA (Mail Access Agent) protocol for IMAP-style operations
       final context = Context();
-      final stream = await host.newStream(
+      stream = await host.newStream(
         serverId,
         [AccessHandler.protocolId],
         context,
@@ -609,6 +654,16 @@ class SFClient {
     } catch (e) {
       _logger.warning('Failed to delete messages: $e');
       return null;
+    } finally {
+      // The stream is closed on every path: a stream left open holds a slot
+      // on the connection for as long as the session lives.
+      if (stream != null && !stream.isClosed) {
+        try {
+          await stream.close();
+        } catch (e) {
+          _logger.fine('Error closing stream: $e');
+        }
+      }
     }
   }
   
