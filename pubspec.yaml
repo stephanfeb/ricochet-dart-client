@@ -1,7 +1,7 @@
 name: ricochet
 description: Dart client library for the Ricochet P2P store-and-forward messaging network
 version: 0.0.1
-# repository: https://github.com/twostack/ricochet-dart-client
+# repository: https://github.com/stephanfeb/ricochet-dart-client
 
 environment:
   sdk: ^3.5.1
