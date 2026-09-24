@@ -1,7 +1,8 @@
 name: ricochet
 description: Dart client library for the Ricochet P2P store-and-forward messaging network
-version: 0.0.1
-# repository: https://github.com/stephanfeb/ricochet-dart-client
+version: 0.1.0
+repository: https://github.com/stephanfeb/ricochet-dart-client
+issue_tracker: https://github.com/stephanfeb/ricochet-dart-client/issues
 
 environment:
   sdk: ^3.5.1
@@ -21,11 +22,8 @@ dependencies:
   dart_libp2p_kad_dht: '>=1.2.0 <2.0.0'
   dart_libp2p_pubsub: '>=1.1.0 <2.0.0'
 
-  dart_libp2p_merkle_crdt:
-    path: /Users/stephanfeb/IdeaProjects/agentic/dart-libp2p-merkle-crdt
-
-  merkledag:
-    path: /Users/stephanfeb/IdeaProjects/agentic/merkledag
+  dart_libp2p_merkle_crdt: ^1.0.0
+  merkledag: ^1.0.1
 
   dcid: ^1.0.0
   dart_multihash: ^1.0.1
@@ -42,10 +40,3 @@ dev_dependencies:
 
 #  protoc_builder: ^0.4.1
 #  protoc_plugin: ^21.1.2
-
-# The sibling packages disagree on where dart_udx comes from (dart_libp2p and
-# dart_libp2p_pubsub take the local checkout, dart_libp2p_kad_dht the hosted
-# release); overnode_v2 settles it the same way.
-dependency_overrides:
-  dart_udx:
-    path: ../dart-udx
