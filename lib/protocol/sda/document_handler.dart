@@ -15,6 +15,11 @@ import 'package:logging/logging.dart';
 
 import 'document_frame.dart';
 
+/// Who may read a document: its owner ([private], the server's default for
+/// a new document), the owner plus a reader list ([shared]), or anyone
+/// ([public]).
+enum DocumentVisibility { private, shared, public }
+
 /// Store Document Access (SDA) - Client-side protocol methods
 ///
 /// Provides static methods for clients to interact with SDA servers
@@ -66,6 +71,7 @@ class DocumentHandler {
     required Uint8List content,
     String contentType = 'application/json',
     String? ifMatch,
+    DocumentVisibility? visibility,
   }) async {
     try {
       final headers = <String, String>{
@@ -81,6 +87,7 @@ class DocumentHandler {
         path: path,
         headers: headers,
         body: content,
+        visibility: visibility?.name,
       );
 
       await _writeFrameStatic(stream, requestBytes);
@@ -90,6 +97,35 @@ class DocumentHandler {
       return DocumentFrame.decodeResponse(responseBytes);
     } catch (e, stackTrace) {
       _logger.severe('Error putting document: $e', e, stackTrace);
+      rethrow;
+    }
+  }
+
+  /// Set who may read a document (client-side ACCESS with action "set").
+  ///
+  /// Owner only. The response's [DocumentFrameResponse.visibility] is the
+  /// document's visibility afterwards.
+  static Future<DocumentFrameResponse> setDocumentVisibility(
+    P2PStream stream, {
+    required PeerId ownerPeerId,
+    required String path,
+    required DocumentVisibility visibility,
+  }) async {
+    try {
+      final requestBytes = DocumentFrame.encodeRequest(
+        operation: 'ACCESS',
+        ownerPeerId: ownerPeerId,
+        path: path,
+        accessAction: 'set',
+        visibility: visibility.name,
+      );
+
+      await _writeFrameStatic(stream, requestBytes);
+
+      final responseBytes = await _readFrameStatic(stream);
+      return DocumentFrame.decodeResponse(responseBytes);
+    } catch (e, stackTrace) {
+      _logger.severe('Error setting document visibility: $e', e, stackTrace);
       rethrow;
     }
   }

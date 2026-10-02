@@ -12,6 +12,7 @@ import '../core/sf_message.dart';
 import '../core/message_types.dart';
 import '../protocol/maa/access_handler.dart';
 import '../protocol/sca/collection_handler.dart';
+import '../protocol/sda/document_frame.dart';
 import '../protocol/sda/document_handler.dart';
 import '../protocol/sfa/feed_handler.dart';
 import '../protocol/mailbox_notify_protocol.dart';
@@ -738,12 +739,15 @@ class SFClient {
   /// [content] Document content bytes
   /// [contentType] MIME content type
   /// [ifMatch] Optional ETag for optimistic locking
+  /// [visibility] Optional: who may read it. A new document without one is
+  /// private to its owner; an existing one keeps its setting.
   /// [toServer] Optional: specify which server to store to
   Future<DocumentPutResponse?> putDocument({
     required String path,
     required Uint8List content,
     String contentType = 'application/json',
     String? ifMatch,
+    DocumentVisibility? visibility,
     PeerId? toServer,
   }) async {
     final serverId = toServer ?? await _serverSelector.selectServer(config.preferredServers);
@@ -767,6 +771,7 @@ class SFClient {
         content: content,
         contentType: contentType,
         ifMatch: ifMatch,
+        visibility: visibility,
       ).timeout(config.messageTimeout);
       
       await stream.close();
@@ -785,6 +790,51 @@ class SFClient {
       return null;
     } catch (e) {
       _logger.warning('Failed to PUT document: $e');
+      return null;
+    }
+  }
+
+  /// Set who may read one of your own documents.
+  ///
+  /// Returns the server's response, whose [DocumentFrameResponse.visibility]
+  /// is the document's visibility afterwards (404 if there is no such
+  /// document), or null if the request could not be made.
+  Future<DocumentFrameResponse?> setDocumentVisibility({
+    required String path,
+    required DocumentVisibility visibility,
+    PeerId? toServer,
+  }) async {
+    final serverId = toServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for document storage');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        ['/ricochet/store/doc/1.0.0'],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await DocumentHandler.setDocumentVisibility(
+        stream,
+        ownerPeerId: host.id,
+        path: path,
+        visibility: visibility,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      _logger.info('ACCESS set ${host.id.toBase58().substring(0, 12)}.../doc/$path ${visibility.name}: ${response.status}');
+
+      return response;
+    } on TimeoutException {
+      _logger.warning('Document ACCESS timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to set document visibility: $e');
       return null;
     }
   }

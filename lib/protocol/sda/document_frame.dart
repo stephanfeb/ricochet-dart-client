@@ -29,12 +29,22 @@ class DocumentFrame {
     required String path,
     Map<String, String>? headers,
     Uint8List? body,
+    String? visibility,
+    String? accessAction,
   }) {
     final data = <String, dynamic>{
       'operation': operation,
       'ownerPeerId': ownerPeerId.toString(),
       'path': path,
     };
+
+    if (visibility != null) {
+      data['visibility'] = visibility;
+    }
+
+    if (accessAction != null) {
+      data['accessAction'] = accessAction;
+    }
 
     if (headers != null && headers.isNotEmpty) {
       data['headers'] = headers;
@@ -173,6 +183,7 @@ class DocumentFrameResponse {
   int? get lastModified => headers['Last-Modified'] as int?;
   int? get contentLength => headers['Content-Length'] as int?;
   String? get error => headers['error'] as String?;
+  String? get visibility => headers['Visibility'] as String?;
 
   bool get isSuccess => status >= 200 && status < 300;
   bool get isNotModified => status == 304;
