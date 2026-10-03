@@ -10,6 +10,7 @@ import 'package:dart_libp2p_pubsub/dart_libp2p_pubsub.dart';
 import 'package:logging/logging.dart';
 import '../core/sf_message.dart';
 import '../core/message_types.dart';
+import '../protocol/maa/access_frame.dart' show RetrieveRefusedException;
 import '../protocol/maa/access_handler.dart';
 import '../protocol/sca/collection_handler.dart';
 import '../protocol/sda/document_frame.dart';
@@ -289,6 +290,11 @@ class SFClient {
     } on TimeoutException {
       _logger.warning('Retrieval timed out');
       return [];
+    } on RetrieveRefusedException catch (e) {
+      // Not an empty mailbox: the caller is told so, rather than finding
+      // nothing and concluding nothing was ever published there.
+      _logger.warning('Retrieve refused: $e');
+      rethrow;
     } catch (e) {
       _logger.warning('Failed to retrieve messages: $e');
       return [];

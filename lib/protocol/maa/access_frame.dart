@@ -11,6 +11,22 @@ import 'package:dart_libp2p/core/peer/peer_id.dart';
 import '../../core/sf_message.dart';
 import '../../core/message_types.dart';
 
+/// The server refused a retrieve, with its error envelope
+/// (`{"error": ..., "status": ...}`): the mailbox does not exist, or the
+/// caller may not read it.
+class RetrieveRefusedException implements Exception {
+  final String error;
+
+  /// HTTP-style status, when the server gave one (404 no such mailbox,
+  /// 403 not readable by the caller).
+  final int? status;
+
+  const RetrieveRefusedException(this.error, {this.status});
+
+  @override
+  String toString() => 'RetrieveRefusedException(${status ?? '-'}): $error';
+}
+
 /// Access frame encoding/decoding for MAA protocol
 class AccessFrame {
   /// Get operation type from request bytes
@@ -97,7 +113,24 @@ class AccessFrame {
   }
 
   /// Decode retrieve messages response
+  ///
+  /// Throws [RetrieveRefusedException] when the server answered with its
+  /// JSON error envelope instead. The two cannot be confused: a compound
+  /// response starts with a 4-byte length, and one starting with `{` would
+  /// claim over 2 GB of metadata.
   static RetrieveMessagesResponse decodeRetrieveResponse(Uint8List bytes) {
+    if (bytes.isNotEmpty && bytes[0] == 0x7B) {
+      Map<String, dynamic>? envelope;
+      try {
+        envelope = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+      } catch (_) {}
+      if (envelope != null) {
+        throw RetrieveRefusedException(
+          envelope['error'] as String? ?? 'retrieve refused',
+          status: envelope['status'] as int?,
+        );
+      }
+    }
     final data = ByteData.sublistView(bytes);
     int offset = 0;
 

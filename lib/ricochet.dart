@@ -83,6 +83,7 @@ export 'core/message_flags.dart';
 export 'protocol/mma/admin_protocol.dart';
 export 'protocol/mma/admin_frame.dart';
 export 'protocol/mailbox_notify_protocol.dart';
+export 'protocol/maa/access_frame.dart' show RetrieveRefusedException;
 export 'protocol/sda/document_frame.dart';
 export 'protocol/sda/document_handler.dart';
 export 'protocol/sfa/feed_frame.dart';
