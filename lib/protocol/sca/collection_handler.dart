@@ -13,6 +13,10 @@ import 'package:logging/logging.dart';
 
 import 'collection_frame.dart';
 
+/// Who may read a collection. A collection that is created without a
+/// visibility is private: only its owner may read it.
+enum CollectionVisibility { private, shared, public }
+
 /// Store Collection Access (SCA) - Client-side protocol methods
 class CollectionHandler {
   static const String protocolId = '/ricochet/store/collection/1.0.0';
@@ -22,12 +26,15 @@ class CollectionHandler {
   // Client-side static methods
   // ============================================================================
 
-  /// Create a new collection
+  /// Create a new collection.
+  ///
+  /// Without a [visibility] the server makes the collection private.
   static Future<CollectionFrameResponse> createCollection(
     P2PStream stream, {
     required PeerId ownerPeerId,
     required String path,
     required String name,
+    CollectionVisibility? visibility,
   }) async {
     try {
       final requestBytes = CollectionFrame.encodeRequest(
@@ -35,6 +42,7 @@ class CollectionHandler {
         ownerPeerId: ownerPeerId,
         path: path,
         name: name,
+        visibility: visibility?.name,
       );
 
       await _writeFrameStatic(stream, requestBytes);
@@ -42,6 +50,34 @@ class CollectionHandler {
       return CollectionFrame.decodeResponse(responseBytes);
     } catch (e, stackTrace) {
       _logger.severe('Error creating collection: $e', e, stackTrace);
+      rethrow;
+    }
+  }
+
+  /// Set who may read a collection (client-side ACCESS with action "set").
+  ///
+  /// Owner only. The response's [CollectionFrameResponse.visibility] is the
+  /// collection's visibility afterwards.
+  static Future<CollectionFrameResponse> setCollectionVisibility(
+    P2PStream stream, {
+    required PeerId ownerPeerId,
+    required String path,
+    required CollectionVisibility visibility,
+  }) async {
+    try {
+      final requestBytes = CollectionFrame.encodeRequest(
+        operation: 'ACCESS',
+        ownerPeerId: ownerPeerId,
+        path: path,
+        accessAction: 'set',
+        visibility: visibility.name,
+      );
+
+      await _writeFrameStatic(stream, requestBytes);
+      final responseBytes = await _readFrameStatic(stream);
+      return CollectionFrame.decodeResponse(responseBytes);
+    } catch (e, stackTrace) {
+      _logger.severe('Error setting collection visibility: $e', e, stackTrace);
       rethrow;
     }
   }
@@ -198,6 +234,7 @@ class CollectionHandler {
     required String path,
     int? limit,
     int? offset,
+    String? cursor,
   }) async {
     try {
       final requestBytes = CollectionFrame.encodeRequest(
@@ -206,6 +243,7 @@ class CollectionHandler {
         path: path,
         limit: limit,
         offset: offset,
+        cursor: cursor,
       );
 
       await _writeFrameStatic(stream, requestBytes);
@@ -217,7 +255,13 @@ class CollectionHandler {
     }
   }
 
-  /// Query a collection with JSONB filter
+  /// Query a collection with JSONB filter.
+  ///
+  /// The response body is `{"items": [...]}`. A filtered query reports
+  /// [CollectionFrameResponse.totalCount] only when [wantTotal] is true,
+  /// because the server must scan all matches to count them. To fetch the
+  /// next page, pass the response's [CollectionFrameResponse.nextCursor] as
+  /// [cursor]; a cursor takes precedence over [offset].
   static Future<CollectionFrameResponse> queryCollection(
     P2PStream stream, {
     required PeerId ownerPeerId,
@@ -227,6 +271,8 @@ class CollectionHandler {
     bool? sortAsc,
     int? limit,
     int? offset,
+    String? cursor,
+    bool wantTotal = false,
   }) async {
     try {
       final requestBytes = CollectionFrame.encodeRequest(
@@ -238,6 +284,8 @@ class CollectionHandler {
         sortAsc: sortAsc,
         limit: limit,
         offset: offset,
+        cursor: cursor,
+        wantTotal: wantTotal,
       );
 
       await _writeFrameStatic(stream, requestBytes);

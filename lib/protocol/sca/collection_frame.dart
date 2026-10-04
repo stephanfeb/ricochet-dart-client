@@ -35,6 +35,11 @@ class CollectionFrame {
     bool? sortAsc,
     int? limit,
     int? offset,
+    String? cursor,
+    bool wantTotal = false,
+    String? visibility,
+    String? accessAction,
+    String? readerPeerId,
   }) {
     final data = <String, dynamic>{
       'operation': operation,
@@ -51,6 +56,11 @@ class CollectionFrame {
     if (sortAsc != null) data['sortAsc'] = sortAsc;
     if (limit != null) data['limit'] = limit;
     if (offset != null) data['offset'] = offset;
+    if (cursor != null) data['cursor'] = cursor;
+    if (wantTotal) data['wantTotal'] = true;
+    if (visibility != null) data['visibility'] = visibility;
+    if (accessAction != null) data['accessAction'] = accessAction;
+    if (readerPeerId != null) data['readerPeerId'] = readerPeerId;
 
     final json = jsonEncode(data);
     return Uint8List.fromList(utf8.encode(json));
@@ -115,9 +125,17 @@ class CollectionFrame {
         ? Map<String, dynamic>.from(data['headers'] as Map)
         : <String, dynamic>{};
 
-    final body = data['body'] != null
-        ? base64Decode(data['body'] as String)
-        : null;
+    // go-ricochet sends JSON payloads (an item's content, a QUERY page) as
+    // raw JSON in `data`, not base64 in `body`. Older servers use `body`.
+    // Both arrive here as the payload's bytes.
+    final Uint8List? body;
+    if (data['data'] != null) {
+      body = Uint8List.fromList(utf8.encode(jsonEncode(data['data'])));
+    } else if (data['body'] != null) {
+      body = base64Decode(data['body'] as String);
+    } else {
+      body = null;
+    }
 
     return CollectionFrameResponse(
       status: data['status'] as int,
@@ -191,10 +209,19 @@ class CollectionFrameResponse {
 
   String? get etag => headers['ETag'] as String?;
   int? get version => headers['X-Version'] as int?;
+  /// The number of matches. A filtered QUERY sends it only when the request
+  /// asked for it (`wantTotal`), and a page fetched with a cursor never does.
   int? get totalCount => headers['X-Total-Count'] as int?;
   bool? get hasMore => headers['X-Has-More'] as bool?;
   int? get recordCount => headers['X-Record-Count'] as int?;
   String? get error => headers['Error'] as String?;
+
+  /// The cursor that fetches the next page of a LIST or QUERY; null on the
+  /// last page.
+  String? get nextCursor => headers['Next-Cursor'] as String?;
+
+  /// A collection's visibility, on an ACCESS response.
+  String? get visibility => headers['Visibility'] as String?;
 
   bool get isSuccess => status >= 200 && status < 300;
   bool get isNotFound => status == 404;

@@ -40,6 +40,8 @@ Future<void> _testPutAndGet(TestContext ctx) async {
       ownerPeerId: ctx.localPeerId,
       path: 'interop-test/doc-1',
       content: content,
+      // The secondary client reads this document.
+      visibility: DocumentVisibility.public,
     );
     await stream.close();
 

@@ -18,7 +18,7 @@ Ricochet protocol IDs.
 
 ```yaml
 dependencies:
-  ricochet: ^0.2.0
+  ricochet: ^0.2.1
 ```
 
 ## Usage

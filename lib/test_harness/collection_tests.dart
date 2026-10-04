@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dart_libp2p/core/peer/peer_id.dart';
 
+import '../protocol/sca/collection_frame.dart';
 import '../protocol/sca/collection_handler.dart';
 import 'test_runner.dart';
 
@@ -42,6 +43,8 @@ Future<void> _testCreateAndGet(TestContext ctx) async {
       ownerPeerId: ctx.localPeerId,
       path: 'interop-test-products',
       name: 'Product Catalog',
+      // The secondary client reads this collection.
+      visibility: CollectionVisibility.public,
     );
     await stream.close();
 
@@ -362,11 +365,12 @@ Future<void> _testQueryEquality(TestContext ctx) async {
       stream,
       ownerPeerId: ctx.localPeerId,
       path: 'interop-test-query',
+      wantTotal: true,
       filter: {'category': 'tools'},
     );
     await stream.close();
 
-    final count = resp.totalCount ?? 0;
+    final count = _queryCount(resp);
     report(_tag, 'Query equality filter', resp.isSuccess && count == 2,
         !resp.isSuccess ? 'status ${resp.status}' :
         count != 2 ? 'expected 2 results, got $count' : null);
@@ -384,11 +388,12 @@ Future<void> _testQueryComparison(TestContext ctx) async {
       stream,
       ownerPeerId: ctx.localPeerId,
       path: 'interop-test-query',
+      wantTotal: true,
       filter: {'price': {'\$lt': 30}},
     );
     await stream.close();
 
-    final count = resp.totalCount ?? 0;
+    final count = _queryCount(resp);
     report(_tag, 'Query comparison (\$lt)', resp.isSuccess && count == 2,
         !resp.isSuccess ? 'status ${resp.status}' :
         count != 2 ? 'expected 2 results, got $count' : null);
@@ -407,6 +412,7 @@ Future<void> _testQueryCompound(TestContext ctx) async {
       stream,
       ownerPeerId: ctx.localPeerId,
       path: 'interop-test-query',
+      wantTotal: true,
       filter: {
         '\$and': [
           {'category': 'tools'},
@@ -416,7 +422,7 @@ Future<void> _testQueryCompound(TestContext ctx) async {
     );
     await stream.close();
 
-    final count = resp.totalCount ?? 0;
+    final count = _queryCount(resp);
     report(_tag, 'Query compound (\$and)', resp.isSuccess && count == 1,
         !resp.isSuccess ? 'status ${resp.status}' :
         count != 1 ? 'expected 1 result, got $count' : null);
@@ -475,4 +481,14 @@ Future<void> _testCrossClientItemRead(TestContext ctx, PeerId primaryPeerId) asy
   } catch (e) {
     report(_tag, 'Cross-client read collection item', false, '$e');
   }
+}
+
+/// The number of matches a QUERY response reports, or -1 if the total
+/// header and the returned items disagree.
+int _queryCount(CollectionFrameResponse resp) {
+  if (resp.body == null) return 0;
+  final data = jsonDecode(utf8.decode(resp.body!));
+  final items = data is Map<String, dynamic> && data['items'] is List ? (data['items'] as List).length : 0;
+  final total = resp.totalCount;
+  return total == null || total == items ? items : -1;
 }
