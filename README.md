@@ -18,8 +18,7 @@ Ricochet protocol IDs.
 
 ```yaml
 dependencies:
-  ricochet:
-    path: ../ricochet-dart-client
+  ricochet: ^0.2.0
 ```
 
 ## Usage

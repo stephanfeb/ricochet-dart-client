@@ -1,6 +1,6 @@
 name: ricochet
 description: Dart client library for the Ricochet P2P store-and-forward messaging network
-version: 0.1.0
+version: 0.2.0
 repository: https://github.com/stephanfeb/ricochet-dart-client
 issue_tracker: https://github.com/stephanfeb/ricochet-dart-client/issues
 
@@ -16,14 +16,11 @@ dependencies:
   yaml: ^3.1.2
   http: ^1.2.0
 
-  # Ranges rather than ^1.x: dart_libp2p 2.0.0 changes no API used here and
-  # differs only on the UDX wire, and kad_dht/pubsub 1.3.0 accept it.
-  dart_libp2p: '>=1.0.0 <3.0.0'
+  # Ranges rather than ^1.x: dart_libp2p 2.x, 3.x and 4.x change no API used
+  # here, and kad_dht/pubsub 1.4.0 accept all of them.
+  dart_libp2p: '>=1.0.0 <5.0.0'
   dart_libp2p_kad_dht: '>=1.2.0 <2.0.0'
   dart_libp2p_pubsub: '>=1.1.0 <2.0.0'
-
-  dart_libp2p_merkle_crdt: ^1.0.0
-  merkledag: ^1.0.1
 
   dcid: ^1.0.0
   dart_multihash: ^1.0.1
