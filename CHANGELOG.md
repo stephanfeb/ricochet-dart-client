@@ -1,3 +1,9 @@
+## 0.2.2
+
+- **The server availability check no longer opens an empty MMA stream.** When the client was not connected to a server, `ServerSelector` opened an admin (MMA) stream and closed it with no request. go-ricochet logged each one as a failed request (`op=unrouted`, 500). The check now only dials the server (`host.connect`). With dart_libp2p 4.1.6 or later, a check that runs while another dial to the server is in progress joins that dial.
+- **A server that is connected is not marked unavailable.** When the check failed but another dial had connected the server in the meantime, `selectServer` marked the server unavailable for 30 s, and requests in that time found no server. `selectServer` now checks the connection again before it marks a server. `selectServerByCapacity` no longer marks a connected server unavailable when it does not answer the capacity query; it leaves the server out of that choice only.
+- **`retrieveMessages(throwOnFailure: true)` reports a failed retrieval.** A retrieval that gets no answer (no server, a timeout, another error) throws `RetrieveFailedException` instead of returning an empty list, so a caller can tell an empty mailbox from one it could not read. Without the option, the behaviour does not change.
+
 ## 0.2.1
 
 - **Collection items and query results arrive again.** go-ricochet now sends an item's content and a QUERY page as raw JSON in the response's `data` field, not as base64 in `body`. The client read only `body`, so `getCollectionItem` and `queryCollection` returned no body. `CollectionFrame.decodeResponse` now reads `data`, and still reads `body` from older servers. In both cases the payload is in `CollectionFrameResponse.body`.

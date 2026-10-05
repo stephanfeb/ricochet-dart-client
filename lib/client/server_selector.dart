@@ -5,6 +5,7 @@ import 'package:dart_libp2p/core/peer/peer_id.dart';
 import 'package:dart_libp2p/core/multiaddr.dart';
 import 'package:dart_libp2p/core/network/context.dart';
 import 'package:dart_libp2p/core/network/network.dart';
+import 'package:dart_libp2p/core/peer/addr_info.dart';
 import 'package:logging/logging.dart';
 import '../registry/peer_preferences.dart';
 import '../core/sf_message.dart';
@@ -60,6 +61,11 @@ class ServerSelector {
       if (await isServerAvailable(serverId)) {
         _logger.info('Selected server: ${serverId.toString().substring(0, 12)}... (priority: ${pref.priority})');
         return serverId;
+      } else if (_isConnected(serverId)) {
+        // The check failed, but another dial connected the server in the
+        // meantime: it is available.
+        _logger.info('Selected server: ${serverId.toString().substring(0, 12)}... (priority: ${pref.priority})');
+        return serverId;
       } else {
         // Mark as unavailable temporarily
         markServerUnavailable(serverId);
@@ -70,16 +76,21 @@ class ServerSelector {
     return null;
   }
   
+  bool _isConnected(PeerId serverId) {
+    final connectedness = host.network.connectedness(serverId);
+    return connectedness == Connectedness.connected ||
+        connectedness == Connectedness.limited;
+  }
+
   /// Check if a server is available
+  ///
+  /// A server we are connected to is available. Otherwise the check dials
+  /// the server. It does not open a stream: an MMA stream closed with no
+  /// request is an error on the server (`op=unrouted`).
   Future<bool> isServerAvailable(PeerId serverId) async {
     try {
-      // Fast path: check if we already have a live connection to this peer.
-      // This avoids the expensive stream probe (yamux SYN/ACK + identify +
-      // multistream negotiation) which can take up to 60s and poisons
-      // connection health metrics on failure.
-      final connectedness = host.network.connectedness(serverId);
-      if (connectedness == Connectedness.connected ||
-          connectedness == Connectedness.limited) {
+      // Fast path: we already have a live connection to this peer.
+      if (_isConnected(serverId)) {
         _unavailableServers.remove(serverId.toString());
         return true;
       }
@@ -94,14 +105,11 @@ class ServerSelector {
         _logger.fine('Refreshed peerstore address for ${serverId.toString().substring(0, 12)}...');
       }
 
-      final context = Context();
-      final stream = await host.newStream(
-        serverId,
-        [adminProtocolId],
-        context,
-      ).timeout(const Duration(seconds: 10));
-
-      await stream.close();
+      // A concurrent dial to the same peer joins this one (dart_libp2p
+      // 4.1.6 and later), so this does not open a second connection.
+      await host
+          .connect(AddrInfo(serverId, knownAddr != null ? [knownAddr] : const []))
+          .timeout(const Duration(seconds: 10));
       _unavailableServers.remove(serverId.toString());
       return true;
 
@@ -219,7 +227,9 @@ class ServerSelector {
       
       final capacity = await queryServerCapacity(pref.serverId);
       if (capacity == null) {
-        markServerUnavailable(pref.serverId);
+        // A connected server that did not answer the capacity query is
+        // still reachable; only leave it out of this choice.
+        if (!_isConnected(pref.serverId)) markServerUnavailable(pref.serverId);
         continue;
       }
       
