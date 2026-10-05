@@ -14,6 +14,19 @@ import '../../core/message_types.dart';
 /// The server refused a retrieve, with its error envelope
 /// (`{"error": ..., "status": ...}`): the mailbox does not exist, or the
 /// caller may not read it.
+/// A retrieval that could not be done: no server, a timeout, a broken
+/// connection. Unlike [RetrieveRefusedException] the server gave no answer,
+/// so the mailbox may well hold messages; try again. Thrown only when the
+/// caller asks for it (`SFClient.retrieveMessages(throwOnFailure: true)`).
+class RetrieveFailedException implements Exception {
+  final String reason;
+
+  const RetrieveFailedException(this.reason);
+
+  @override
+  String toString() => 'RetrieveFailedException: $reason';
+}
+
 class RetrieveRefusedException implements Exception {
   final String error;
 

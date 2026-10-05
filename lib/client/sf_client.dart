@@ -10,7 +10,7 @@ import 'package:dart_libp2p_pubsub/dart_libp2p_pubsub.dart';
 import 'package:logging/logging.dart';
 import '../core/sf_message.dart';
 import '../core/message_types.dart';
-import '../protocol/maa/access_frame.dart' show RetrieveRefusedException;
+import '../protocol/maa/access_frame.dart' show RetrieveFailedException, RetrieveRefusedException;
 import '../protocol/maa/access_handler.dart';
 import '../protocol/sca/collection_handler.dart';
 import '../protocol/sda/document_frame.dart';
@@ -198,6 +198,10 @@ class SFClient {
   /// [fromSequence] Cursor position (for multi-reader mailboxes)
   /// [maxMessages] Maximum number of messages to retrieve
   /// [minPriority] Minimum priority level to retrieve
+  /// [throwOnFailure] When true, a retrieval that fails (no server, a
+  /// timeout, a broken connection) throws [RetrieveFailedException] instead
+  /// of returning an empty list, so the caller can tell "the mailbox is
+  /// empty" from "the mailbox could not be read" and try again.
   Future<List<SFMessage>> retrieveMessages({
     PeerId? targetPeerId,  // NEW: retrieve from another peer's public mailbox
     PeerId? fromServer,
@@ -205,6 +209,7 @@ class SFClient {
     int? fromSequence,
     int? maxMessages,
     MessagePriority? minPriority,
+    bool throwOnFailure = false,
   }) async {
     final effectivePeerId = targetPeerId ?? host.id;
     final isOwnMailbox = effectivePeerId == host.id;
@@ -222,6 +227,7 @@ class SFClient {
     
     if (serverId == null) {
       _logger.warning('❌ [SFClient] No S&F server available for retrieval');
+      if (throwOnFailure) throw const RetrieveFailedException('No S&F server available');
       return [];
     }
     
@@ -289,6 +295,7 @@ class SFClient {
       
     } on TimeoutException {
       _logger.warning('Retrieval timed out');
+      if (throwOnFailure) throw const RetrieveFailedException('Retrieval timed out');
       return [];
     } on RetrieveRefusedException catch (e) {
       // Not an empty mailbox: the caller is told so, rather than finding
@@ -297,6 +304,7 @@ class SFClient {
       rethrow;
     } catch (e) {
       _logger.warning('Failed to retrieve messages: $e');
+      if (throwOnFailure) throw RetrieveFailedException('$e');
       return [];
     } finally {
       // Always close the stream after use
