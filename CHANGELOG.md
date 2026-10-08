@@ -1,3 +1,7 @@
+## 0.2.3
+
+- **Works with dart_libp2p_pubsub 2.x and 3.x.** `dart_libp2p_pubsub` is now `>=1.1.0 <5.0.0` (before: `>=1.1.0 <2.0.0`). None of those releases changes an API this package uses. The upper bound had made `ricochet` unresolvable next to dart_libp2p_pubsub 2.0.0 or later. All tests pass against dart_libp2p_pubsub 3.0.0 and against 1.1.0.
+
 ## 0.2.2
 
 - **The server availability check no longer opens an empty MMA stream.** When the client was not connected to a server, `ServerSelector` opened an admin (MMA) stream and closed it with no request. go-ricochet logged each one as a failed request (`op=unrouted`, 500). The check now only dials the server (`host.connect`). With dart_libp2p 4.1.6 or later, a check that runs while another dial to the server is in progress joins that dial.
