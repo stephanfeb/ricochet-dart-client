@@ -1,3 +1,8 @@
+## 0.2.4
+
+- **`SFClient` can make a collection public.** `createCollection` takes `visibility`, and the new `setCollectionVisibility` changes it later; its response's `visibility` is the collection's visibility afterwards (404 when there is no such collection). The 0.2.1 entry said this already, but 0.2.1 added visibility only to `CollectionHandler`: through `SFClient` every collection was private, so no other peer could read it. `queryCollection`'s `wantTotal` and `cursor`, also in that entry, are still on `CollectionHandler` only.
+- The test files run one at a time (`dart_test.yaml`): two files that each start a Ricochet server time out dialing when run side by side.
+
 ## 0.2.3
 
 - **Works with dart_libp2p_pubsub 2.x and 3.x.** `dart_libp2p_pubsub` is now `>=1.1.0 <5.0.0` (before: `>=1.1.0 <2.0.0`). None of those releases changes an API this package uses. The upper bound had made `ricochet` unresolvable next to dart_libp2p_pubsub 2.0.0 or later. All tests pass against dart_libp2p_pubsub 3.0.0 and against 1.1.0.

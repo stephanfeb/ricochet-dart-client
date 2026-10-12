@@ -1,0 +1,4 @@
+# One test file at a time. Two files that each start a Ricochet server
+# (test/support/ricochet_server.dart) and dial it side by side time out
+# dialing; one after the other they pass.
+concurrency: 1

@@ -12,6 +12,7 @@ import '../core/sf_message.dart';
 import '../core/message_types.dart';
 import '../protocol/maa/access_frame.dart' show RetrieveFailedException, RetrieveRefusedException;
 import '../protocol/maa/access_handler.dart';
+import '../protocol/sca/collection_frame.dart';
 import '../protocol/sca/collection_handler.dart';
 import '../protocol/sda/document_frame.dart';
 import '../protocol/sda/document_handler.dart';
@@ -1721,10 +1722,14 @@ class SFClient {
   // Collection Store Operations (SCA)
   // ============================================================================
 
-  /// Create a new collection on your store
+  /// Create a new collection on your store.
+  ///
+  /// Without a [visibility] the server makes the collection private: only
+  /// you can read it.
   Future<CollectionInfo?> createCollection({
     required String path,
     required String name,
+    CollectionVisibility? visibility,
     PeerId? toServer,
   }) async {
     final serverId = toServer ?? await _serverSelector.selectServer(config.preferredServers);
@@ -1746,6 +1751,7 @@ class SFClient {
         ownerPeerId: host.id,
         path: path,
         name: name,
+        visibility: visibility,
       ).timeout(config.messageTimeout);
 
       await stream.close();
@@ -1767,6 +1773,51 @@ class SFClient {
       return null;
     } catch (e) {
       _logger.warning('Failed to CREATE collection: $e');
+      return null;
+    }
+  }
+
+  /// Set who may read one of your own collections.
+  ///
+  /// Returns the server's response, whose [CollectionFrameResponse.visibility]
+  /// is the collection's visibility afterwards (404 if there is no such
+  /// collection), or null if the request could not be made.
+  Future<CollectionFrameResponse?> setCollectionVisibility({
+    required String path,
+    required CollectionVisibility visibility,
+    PeerId? toServer,
+  }) async {
+    final serverId = toServer ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for collection access');
+      return null;
+    }
+
+    try {
+      final context = Context();
+      final stream = await host.newStream(
+        serverId,
+        [CollectionHandler.protocolId],
+        context,
+      ).timeout(config.connectionTimeout);
+
+      final response = await CollectionHandler.setCollectionVisibility(
+        stream,
+        ownerPeerId: host.id,
+        path: path,
+        visibility: visibility,
+      ).timeout(config.messageTimeout);
+
+      await stream.close();
+
+      _logger.info('ACCESS set ${host.id.toBase58().substring(0, 12)}.../coll/$path ${visibility.name}: ${response.status}');
+
+      return response;
+    } on TimeoutException {
+      _logger.warning('Collection ACCESS timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Failed to set collection visibility: $e');
       return null;
     }
   }
