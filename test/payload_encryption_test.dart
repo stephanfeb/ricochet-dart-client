@@ -20,6 +20,10 @@ const recipientX25519Pub = '60346e7c911a5f6ba154129174cafe75b294ac3bbd5549632f48
 const senderX25519Priv = '58e86efb75fa4e2c410f46e16de9f6acae1a1703528651b69bc176c088bef36e';
 const boundVector =
     '52434532000102030405060708090a0b0c0d0e0f1011121314151617ad5b0b77e4fab9d141c726d795e7d5e1c34cec901852e78daff0992911dd6d9572ff54a3060d404fde16c276f12f2c5ee365806eb4b0b188d1af9784bc21670864cfaf883cd5948da726bed74461f8afee37590c852eb9e0bd7128c220a61df5a036436f5961';
+// The same message bound to folder 'café/日記' (ricochet-i8c): sealed with
+// the binding as UTF-8, as Go does.
+const nonASCIIVector =
+    '52434532000102030405060708090a0b0c0d0e0f1011121314151617a14cd75b5fb31d40f785cb0b0fd0347bc34cec901852e78daff0992911dd6d9572ff54a3060d404fde16c276f12f2c5ee365806eb4b0b188d1af9784bc21670864cfaf883cd59484ad29ba7b954e165538b8dca4b516e5fbbf30749d3cb707f9af354f2b1c67489cd1ca4538d1';
 const legacyVector =
     '000102030405060708090a0b0c0d0e0f10111213141516177141d087ac9990c11975e82fa8c06a05ab1db1ce334d8c90a9c4bc1d16d968';
 
@@ -76,6 +80,17 @@ void main() {
     final got = await recipientEnc.decryptBound(unhex(legacyVector), binding, sender);
     expect(utf8.decode(got.payload), 'hello, ricochet');
     expect(got.bound, isFalse);
+  });
+
+  test('a folder outside ASCII binds as UTF-8, as the Go client seals it', () async {
+    const nonASCII = PayloadBinding(
+        recipientPeerId: recipientPeer, folderPath: 'café/日記', messageId: 'msg-0001');
+    final sealed = await senderEnc.encryptBound(
+        Uint8List.fromList(utf8.encode('hello, ricochet')), nonASCII, recipient, nonce: nonce);
+    expect(hex(sealed), nonASCIIVector);
+    final got = await recipientEnc.decryptBound(unhex(nonASCIIVector), nonASCII, sender);
+    expect(utf8.decode(got.payload), 'hello, ricochet');
+    expect(got.bound, isTrue);
   });
 
   test('a ciphertext moved to another folder, id or recipient is refused', () async {

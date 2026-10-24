@@ -16,6 +16,7 @@
 /// into the same folder.
 library;
 
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dart_libp2p/core/crypto/keys.dart' as libp2p;
@@ -109,7 +110,11 @@ class PayloadBinding {
       if (plain.length - offset < n) {
         throw PayloadDecryptException('bound payload header truncated');
       }
-      fields.add(String.fromCharCodes(plain.sublist(offset, offset + n)));
+      try {
+        fields.add(utf8.decode(plain.sublist(offset, offset + n)));
+      } on FormatException {
+        throw PayloadDecryptException('bound payload header is not UTF-8');
+      }
       offset += n;
     }
     return (
@@ -118,7 +123,9 @@ class PayloadBinding {
     );
   }
 
-  static Uint8List _utf8(String s) => Uint8List.fromList(s.codeUnits);
+  // UTF-8, as the Go and JS clients encode it. String.codeUnits is UTF-16
+  // truncated to bytes, which only agrees for ASCII.
+  static Uint8List _utf8(String s) => Uint8List.fromList(utf8.encode(s));
 
   @override
   bool operator ==(Object other) =>

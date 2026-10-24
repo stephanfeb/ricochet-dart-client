@@ -1,3 +1,7 @@
+## Unreleased
+
+- **Encrypted messages to a folder outside ASCII open in Go and JS, and theirs open here.** The payload binding encoded the recipient, folder and message id with `String.codeUnits`, which keeps the low byte of each UTF-16 code unit; the Go and JS clients encode them as UTF-8. The two agree only for ASCII: a folder such as `café/日記` sealed to different bytes, so the other side refused it as bound to another message. The binding is now UTF-8 (`utf8.encode`/`utf8.decode`), checked against a Go-sealed vector. A message this client sealed to a non-ASCII folder before this change no longer opens; ASCII folders, ids and peer ids are unaffected.
+
 ## 0.2.4
 
 - **`SFClient` can make a collection public.** `createCollection` takes `visibility`, and the new `setCollectionVisibility` changes it later; its response's `visibility` is the collection's visibility afterwards (404 when there is no such collection). The 0.2.1 entry said this already, but 0.2.1 added visibility only to `CollectionHandler`: through `SFClient` every collection was private, so no other peer could read it. `queryCollection`'s `wantTotal` and `cursor`, also in that entry, are still on `CollectionHandler` only.
