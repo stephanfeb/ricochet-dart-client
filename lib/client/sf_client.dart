@@ -394,7 +394,10 @@ class SFClient {
         
         // CRITICAL: Include the server peer ID so retrieval uses the same server
         // that sent the notification (and has the message)
-        final notificationWithServer = notification.withServerPeerId(remotePeer.toBase58());
+        // A private mailbox is always the recipient's own.
+        final notificationWithServer = notification
+            .withServerPeerId(remotePeer.toBase58())
+            .withOwnerIfMissing(host.id.toBase58());
         
         _logger.info('📬 Private notification from ${remotePeer.toBase58().substring(0, 12)}...: ${notification.mailboxPath}');
         _notificationController.add(notificationWithServer);
@@ -429,7 +432,9 @@ class SFClient {
     subscription.stream.listen((message) {
       try {
         final json = jsonDecode(utf8.decode(message.data));
-        final notification = MailboxNotification.fromJson(json);
+        // The topic names the owner, so a server that does not send it in
+        // the notification still gets it attributed.
+        final notification = MailboxNotification.fromJson(json).withOwnerIfMissing(ownerPeerId);
         
         _logger.info('📬 Public/Shared notification: ${notification.mailboxPath}');
         _notificationController.add(notification);
