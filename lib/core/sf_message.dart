@@ -686,6 +686,10 @@ class DocumentResponse {
   final String? contentType;
   final int? lastModified;
   final Uint8List? content;
+  final int? version;
+
+  /// Earlier versions the document keeps; 0 when history is off.
+  final int history;
   
   const DocumentResponse({
     required this.status,
@@ -693,6 +697,8 @@ class DocumentResponse {
     this.contentType,
     this.lastModified,
     this.content,
+    this.version,
+    this.history = 0,
   });
   
   bool get isNotModified => status == 304;
@@ -707,12 +713,16 @@ class DocumentPutResponse {
   final String? etag;
   final int? lastModified;
   final bool created;
+
+  /// The new version number; set by [SFClient.restoreDocumentVersion].
+  final int? version;
   
   const DocumentPutResponse({
     required this.status,
     this.etag,
     this.lastModified,
     required this.created,
+    this.version,
   });
   
   bool get isSuccess => status == 200 || status == 201 || status == 204;
@@ -726,13 +736,56 @@ class DocumentMetadata {
   final String contentType;
   final int lastModified;
   final int contentLength;
+  final int? version;
+
+  /// Earlier versions the document keeps; 0 when history is off.
+  final int history;
   
   const DocumentMetadata({
     required this.etag,
     required this.contentType,
     required this.lastModified,
     required this.contentLength,
+    this.version,
+    this.history = 0,
   });
+}
+
+/// One kept version of a document. [content] is set only when a single
+/// version is fetched; a listing carries [size] instead.
+class DocumentVersionInfo {
+  final int versionNumber;
+  final String contentHash;
+  final String contentType;
+
+  /// Unix milliseconds.
+  final int createdAt;
+  final int size;
+  final Uint8List? content;
+
+  const DocumentVersionInfo({
+    required this.versionNumber,
+    required this.contentHash,
+    required this.contentType,
+    required this.createdAt,
+    required this.size,
+    this.content,
+  });
+
+  /// One entry of a HISTORY listing. createdAt is Unix ms; servers before
+  /// history could be turned on sent RFC 3339, which is read too.
+  factory DocumentVersionInfo.fromJson(Map<String, dynamic> json) {
+    final at = json['createdAt'];
+    return DocumentVersionInfo(
+      versionNumber: (json['versionNumber'] as num).toInt(),
+      contentHash: json['contentHash'] as String? ?? '',
+      contentType: json['contentType'] as String? ?? '',
+      createdAt: at is num
+          ? at.toInt()
+          : (DateTime.tryParse(at as String? ?? '')?.millisecondsSinceEpoch ?? 0),
+      size: (json['size'] as num?)?.toInt() ?? 0,
+    );
+  }
 }
 
 /// Document information from LIST operation

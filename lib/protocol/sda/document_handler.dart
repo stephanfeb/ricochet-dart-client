@@ -72,6 +72,7 @@ class DocumentHandler {
     String contentType = 'application/json',
     String? ifMatch,
     DocumentVisibility? visibility,
+    int? history,
   }) async {
     try {
       final headers = <String, String>{
@@ -88,6 +89,7 @@ class DocumentHandler {
         headers: headers,
         body: content,
         visibility: visibility?.name,
+        history: history,
       );
 
       await _writeFrameStatic(stream, requestBytes);
@@ -187,6 +189,78 @@ class DocumentHandler {
       return DocumentFrame.decodeResponse(responseBytes);
     } catch (e, stackTrace) {
       _logger.severe('Error heading document: $e', e, stackTrace);
+      rethrow;
+    }
+  }
+
+  /// List a document's kept versions, newest first, with sizes but not
+  /// bodies (client-side HISTORY). The body is a JSON array.
+  static Future<DocumentFrameResponse> getDocumentHistory(
+    P2PStream stream, {
+    required PeerId ownerPeerId,
+    required String path,
+    int? maxVersions,
+  }) async {
+    return _exchange(
+      stream,
+      DocumentFrame.encodeRequest(
+        operation: 'HISTORY',
+        ownerPeerId: ownerPeerId,
+        path: path,
+        maxVersions: maxVersions,
+      ),
+      'listing document history',
+    );
+  }
+
+  /// Fetch one kept version of a document with its body (client-side
+  /// HISTORY with a version number).
+  static Future<DocumentFrameResponse> getDocumentVersion(
+    P2PStream stream, {
+    required PeerId ownerPeerId,
+    required String path,
+    required int versionNumber,
+  }) async {
+    return _exchange(
+      stream,
+      DocumentFrame.encodeRequest(
+        operation: 'HISTORY',
+        ownerPeerId: ownerPeerId,
+        path: path,
+        versionNumber: versionNumber,
+      ),
+      'getting document version',
+    );
+  }
+
+  /// Make a kept version current again, as a new version (client-side
+  /// RESTORE). Owner only; [ifMatch] makes it conditional.
+  static Future<DocumentFrameResponse> restoreDocumentVersion(
+    P2PStream stream, {
+    required PeerId ownerPeerId,
+    required String path,
+    required int versionNumber,
+    String? ifMatch,
+  }) async {
+    return _exchange(
+      stream,
+      DocumentFrame.encodeRequest(
+        operation: 'RESTORE',
+        ownerPeerId: ownerPeerId,
+        path: path,
+        versionNumber: versionNumber,
+        headers: ifMatch != null ? {'If-Match': ifMatch} : null,
+      ),
+      'restoring document version',
+    );
+  }
+
+  static Future<DocumentFrameResponse> _exchange(P2PStream stream, Uint8List request, String what) async {
+    try {
+      await _writeFrameStatic(stream, request);
+      return DocumentFrame.decodeResponse(await _readFrameStatic(stream));
+    } catch (e, stackTrace) {
+      _logger.severe('Error $what: $e', e, stackTrace);
       rethrow;
     }
   }

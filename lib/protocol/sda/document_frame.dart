@@ -31,12 +31,27 @@ class DocumentFrame {
     Uint8List? body,
     String? visibility,
     String? accessAction,
+    int? history,
+    int? versionNumber,
+    int? maxVersions,
   }) {
     final data = <String, dynamic>{
       'operation': operation,
       'ownerPeerId': ownerPeerId.toString(),
       'path': path,
     };
+
+    if (maxVersions != null) {
+      data['maxVersions'] = maxVersions;
+    }
+
+    if (versionNumber != null) {
+      data['versionNumber'] = versionNumber;
+    }
+
+    if (history != null) {
+      data['history'] = history;
+    }
 
     if (visibility != null) {
       data['visibility'] = visibility;
@@ -184,6 +199,10 @@ class DocumentFrameResponse {
   int? get contentLength => headers['Content-Length'] as int?;
   String? get error => headers['error'] as String?;
   String? get visibility => headers['Visibility'] as String?;
+  int? get version => (headers['Version'] as num?)?.toInt();
+
+  /// Earlier versions the document keeps; 0 when history is off.
+  int get history => (headers['History'] as num?)?.toInt() ?? 0;
 
   bool get isSuccess => status >= 200 && status < 300;
   bool get isNotModified => status == 304;

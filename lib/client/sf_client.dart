@@ -730,6 +730,8 @@ class SFClient {
         contentType: response.contentType,
         lastModified: response.lastModified,
         content: response.body,
+        version: response.version,
+        history: response.history,
       );
     } on TimeoutException {
       _logger.warning('GET document timed out');
@@ -756,6 +758,10 @@ class SFClient {
   /// [ifMatch] Optional ETag for optimistic locking
   /// [visibility] Optional: who may read it. A new document without one is
   /// private to its owner; an existing one keeps its setting.
+  /// [history] Optional: how many earlier versions the document keeps,
+  /// starting with the one this write replaces (the server clamps it to its
+  /// ceiling). 0 turns history off and deletes the kept versions; null
+  /// leaves the setting as it is.
   /// [toServer] Optional: specify which server to store to
   Future<DocumentPutResponse?> putDocument({
     required String path,
@@ -763,6 +769,7 @@ class SFClient {
     String contentType = 'application/json',
     String? ifMatch,
     DocumentVisibility? visibility,
+    int? history,
     PeerId? toServer,
   }) async {
     final serverId = toServer ?? await _serverSelector.selectServer(config.preferredServers);
@@ -787,6 +794,7 @@ class SFClient {
         contentType: contentType,
         ifMatch: ifMatch,
         visibility: visibility,
+        history: history,
       ).timeout(config.messageTimeout);
       
       await stream.close();
@@ -955,6 +963,8 @@ class SFClient {
         contentType: response.contentType!,
         lastModified: response.lastModified!,
         contentLength: response.contentLength!,
+        version: response.version,
+        history: response.history,
       );
     } on TimeoutException {
       _logger.warning('HEAD document timed out');
@@ -962,6 +972,113 @@ class SFClient {
     } catch (e) {
       _logger.warning('Failed to HEAD document: $e');
       return null;
+    }
+  }
+
+  /// The kept versions of a document, newest first, with sizes but not
+  /// bodies. Empty when history is off; null if the document does not exist
+  /// or the request failed.
+  Future<List<DocumentVersionInfo>?> getDocumentHistory({
+    required PeerId ownerPeerId,
+    required String path,
+    int? maxVersions,
+    PeerId? fromServer,
+  }) async {
+    final response = await _documentCall(
+      fromServer,
+      'HISTORY',
+      (stream) => DocumentHandler.getDocumentHistory(stream,
+          ownerPeerId: ownerPeerId, path: path, maxVersions: maxVersions),
+    );
+    if (response == null || response.status != 200) return null;
+    final body = response.body;
+    if (body == null || body.isEmpty) return const [];
+    final entries = jsonDecode(utf8.decode(body)) as List<dynamic>? ?? const [];
+    return [for (final e in entries) DocumentVersionInfo.fromJson(e as Map<String, dynamic>)];
+  }
+
+  /// One kept version of a document with its body. Null if it is not kept
+  /// or the request failed.
+  Future<DocumentVersionInfo?> getDocumentVersion({
+    required PeerId ownerPeerId,
+    required String path,
+    required int versionNumber,
+    PeerId? fromServer,
+  }) async {
+    final response = await _documentCall(
+      fromServer,
+      'HISTORY',
+      (stream) => DocumentHandler.getDocumentVersion(stream,
+          ownerPeerId: ownerPeerId, path: path, versionNumber: versionNumber),
+    );
+    if (response == null || response.status != 200) return null;
+    final content = response.body ?? Uint8List(0);
+    return DocumentVersionInfo(
+      versionNumber: response.version ?? versionNumber,
+      contentHash: response.etag ?? '',
+      contentType: response.contentType ?? '',
+      createdAt: (response.headers['Created-At'] as num?)?.toInt() ?? 0,
+      size: content.length,
+      content: content,
+    );
+  }
+
+  /// Make a kept version of one of your own documents current again. It is
+  /// written as a new version ([DocumentPutResponse.version]), so with
+  /// history on the version it replaces is kept and the restore can be
+  /// undone. [ifMatch] makes it conditional on the current ETag (409 if it
+  /// changed); 404 if the version is not kept. Null if the request failed.
+  Future<DocumentPutResponse?> restoreDocumentVersion({
+    required String path,
+    required int versionNumber,
+    String? ifMatch,
+    PeerId? toServer,
+  }) async {
+    final response = await _documentCall(
+      toServer,
+      'RESTORE',
+      (stream) => DocumentHandler.restoreDocumentVersion(stream,
+          ownerPeerId: host.id, path: path, versionNumber: versionNumber, ifMatch: ifMatch),
+    );
+    if (response == null) return null;
+    return DocumentPutResponse(
+      status: response.status,
+      etag: response.etag,
+      lastModified: response.lastModified,
+      created: false,
+      version: response.version,
+    );
+  }
+
+  /// Opens a document stream to [server] (or the selected one), runs [call]
+  /// and closes it. Null if no server was available or the call failed.
+  Future<DocumentFrameResponse?> _documentCall(
+    PeerId? server,
+    String what,
+    Future<DocumentFrameResponse> Function(P2PStream stream) call,
+  ) async {
+    final serverId = server ?? await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      _logger.warning('No S&F server available for document $what');
+      return null;
+    }
+    P2PStream? stream;
+    try {
+      stream = await host.newStream(serverId, ['/ricochet/store/doc/1.0.0'], Context())
+          .timeout(config.connectionTimeout);
+      return await call(stream).timeout(config.messageTimeout);
+    } on TimeoutException {
+      _logger.warning('Document $what timed out');
+      return null;
+    } catch (e) {
+      _logger.warning('Document $what failed: $e');
+      return null;
+    } finally {
+      if (stream != null && !stream.isClosed) {
+        try {
+          await stream.close();
+        } catch (_) {}
+      }
     }
   }
 
