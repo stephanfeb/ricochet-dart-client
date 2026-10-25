@@ -59,6 +59,25 @@ class AccessHandler {
     }
   }
 
+  /// Claim one message from another peer's claim mailbox (client-side).
+  /// The response holds one message, or none when the mailbox is empty.
+  static Future<RetrieveMessagesResponse> claimMessage(
+    P2PStream stream,
+    PeerId ownerPeerId,
+    String folderPath,
+  ) async {
+    try {
+      final requestBytes = AccessFrame.encodeClaimRequest(ownerPeerId, folderPath);
+      await _writeFrameStatic(stream, requestBytes);
+
+      final responseBytes = await _readFrameStatic(stream);
+      return AccessFrame.decodeRetrieveResponse(responseBytes);
+    } catch (e, stackTrace) {
+      _logger.severe('Error claiming a message: $e', e, stackTrace);
+      rethrow;
+    }
+  }
+
   /// Mark messages as delivered (client-side) - sets \Seen flag
   static Future<MarkDeliveredAck> markDelivered(
     P2PStream stream,

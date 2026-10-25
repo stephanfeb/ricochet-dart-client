@@ -633,6 +633,63 @@ class SFClient {
     }
   }
   
+  /// Claim one message from [ownerPeerId]'s claim mailbox at [folderPath]
+  /// ([MailboxType.claim]): the server deletes the oldest message and hands
+  /// it to this caller alone. Returns null when none is left, which is also
+  /// the answer once the mailbox has handed out its share for the hour.
+  ///
+  /// Throws [RetrieveRefusedException] when the server refuses the claim:
+  /// status 400 from a server older than go-ricochet 1.6.0, which does not
+  /// know the operation; 403 when the folder is not a claim mailbox; 404
+  /// when it does not exist. Throws [RetrieveFailedException] when no
+  /// server answers. A claimed message is not emitted on the incoming
+  /// stream; it is the caller's to use.
+  Future<SFMessage?> claimMessage({
+    required PeerId ownerPeerId,
+    required String folderPath,
+    PeerId? fromServer,
+  }) async {
+    final serverId = fromServer ??
+        await _serverSelector.selectServer(config.preferredServers);
+    if (serverId == null) {
+      throw const RetrieveFailedException('No S&F server available');
+    }
+
+    P2PStream? stream;
+    try {
+      stream = await host.newStream(
+        serverId,
+        [AccessHandler.protocolId],
+        Context(),
+      ).timeout(config.connectionTimeout);
+
+      final response = await AccessHandler.claimMessage(
+        stream,
+        ownerPeerId,
+        folderPath,
+      ).timeout(config.messageTimeout);
+
+      host.connManager.protect(serverId, 'ricochet-sf-server');
+      _logger.fine('Claimed ${response.messages.length} message(s) from '
+          '${ownerPeerId.toBase58().substring(0, 12)}.../$folderPath');
+      return response.messages.isEmpty ? null : response.messages.first;
+    } on RetrieveRefusedException {
+      rethrow;
+    } on TimeoutException {
+      throw const RetrieveFailedException('Claim timed out');
+    } catch (e) {
+      throw RetrieveFailedException('Claim failed: $e');
+    } finally {
+      if (stream != null) {
+        try {
+          await stream.close();
+        } catch (e) {
+          _logger.fine('Error closing stream: $e');
+        }
+      }
+    }
+  }
+
   /// Delete messages immediately (bypasses \Deleted flag)
   /// 
   /// This is the equivalent of IMAP STORE +FLAGS \Deleted followed by EXPUNGE

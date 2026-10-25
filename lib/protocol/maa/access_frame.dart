@@ -68,6 +68,17 @@ class AccessFrame {
     return Uint8List.fromList(utf8.encode(json));
   }
 
+  /// Encode a claim request: take one message from a claim mailbox. The
+  /// answer is a retrieve response holding one message or none.
+  static Uint8List encodeClaimRequest(PeerId ownerPeerId, String folderPath) {
+    final json = jsonEncode(<String, dynamic>{
+      'operationType': 'claim',
+      'peerId': ownerPeerId.toString(),
+      'folderPath': folderPath,
+    });
+    return Uint8List.fromList(utf8.encode(json));
+  }
+
   /// Decode retrieve messages request
   static RetrieveMessagesRequest decodeRetrieveRequest(Uint8List bytes) {
     final json = utf8.decode(bytes);
