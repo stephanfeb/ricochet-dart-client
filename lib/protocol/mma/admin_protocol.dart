@@ -324,16 +324,22 @@ class MailboxOperationResponse {
   final String? errorMessage;
   final dynamic data; // Operation-specific data
 
+  /// The entries of a listMailboxes answer: go-ricochet sends them here,
+  /// not in [data]. Each has `folderPath` and `type`, but no `address`.
+  final List<dynamic>? mailboxes;
+
   const MailboxOperationResponse({
     required this.success,
     this.errorMessage,
     this.data,
+    this.mailboxes,
   });
 
   Map<String, dynamic> toJson() => {
         'success': success,
         'errorMessage': errorMessage,
         'data': data,
+        if (mailboxes != null) 'mailboxes': mailboxes,
       };
 
   factory MailboxOperationResponse.fromJson(Map<String, dynamic> json) {
@@ -341,6 +347,7 @@ class MailboxOperationResponse {
       success: json['success'] as bool,
       errorMessage: json['errorMessage'] as String?,
       data: json['data'],
+      mailboxes: json['mailboxes'] as List<dynamic>?,
     );
   }
 }
@@ -409,6 +416,23 @@ class MailboxInfo {
 
     return MailboxInfo(
       address: parseAddress(json['address'] as String, type: type),
+      messageCount: (json['messageCount'] as int?) ?? 0,
+      createdAt: DateTime.fromMillisecondsSinceEpoch((json['createdAt'] as int?) ?? 0),
+      lastAccessedAt: DateTime.fromMillisecondsSinceEpoch((json['lastAccessedAt'] as int?) ?? 0),
+      maxMessages: (json['maxMessages'] as int?) ?? 0,
+      retentionDays: (json['retentionDays'] as int?) ?? 0,
+      retentionCount: json['retentionCount'] as int?,
+    );
+  }
+
+  /// One entry of a listMailboxes answer, which names the folder and type
+  /// but not the owner: the owner is the peer that asked.
+  factory MailboxInfo.fromListEntry(Map<String, dynamic> json, {required PeerId ownerId}) {
+    final typeStr = json['type'] as String;
+    final type = MailboxType.values.firstWhere((e) => e.name == typeStr);
+
+    return MailboxInfo(
+      address: MailboxAddress(ownerId: ownerId, folderPath: json['folderPath'] as String, type: type),
       messageCount: (json['messageCount'] as int?) ?? 0,
       createdAt: DateTime.fromMillisecondsSinceEpoch((json['createdAt'] as int?) ?? 0),
       lastAccessedAt: DateTime.fromMillisecondsSinceEpoch((json['lastAccessedAt'] as int?) ?? 0),

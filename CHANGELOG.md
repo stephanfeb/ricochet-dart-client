@@ -1,3 +1,7 @@
+## 0.3.1
+
+- **`mailboxes.listMailboxes()` lists the owner's mailboxes.** It returned an empty list whatever the owner had: go-ricochet sends the entries in `mailboxes`, and the client read only `data`. Each entry names the folder and type but not the owner, so `MailboxInfo.fromListEntry` builds the address with the asking peer as owner. go-ricochet's list sends no message count, last access or retention count, so a listed `MailboxInfo` has 0, 0 and null for them; `getMailboxInfo` has them. `MailboxOperationResponse` has a new `mailboxes` field.
+
 ## 0.3.0
 
 - **Claim mailboxes.** `MailboxType.claim` is a mailbox whose owner hands its messages out one at a time, such as Signal one-time prekeys: only the owner stores into it or lists it, and `SFClient.claimMessage(ownerPeerId:, folderPath:)` takes the oldest message and deletes it on the server, so no two claimers get the same one. It returns null when none is left, which is also the answer once the mailbox has handed out its share for the hour (go-ricochet allows 30 claims an hour per mailbox by default). A refusal throws `RetrieveRefusedException`: status 400 from a server older than go-ricochet 1.6.0, 403 when the folder is not a claim mailbox, 404 when it does not exist. Create the mailbox with `mailboxes.createMailbox(type: MailboxType.claim)` before storing into it, and give it no `retentionCount`. `MailboxType` has a new value, so an exhaustive `switch` over it needs a case for `claim`.

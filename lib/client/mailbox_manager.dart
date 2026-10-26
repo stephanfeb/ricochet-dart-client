@@ -226,11 +226,13 @@ class MailboxManager {
       );
     }
     
-    if (response.data == null) {
-      return [];
+    // go-ricochet answers in `mailboxes`; reading `data` alone gave an
+    // empty list whatever the owner had.
+    final entries = response.mailboxes;
+    if (entries == null) {
+      return response.data == null ? [] : AdminFrame.decodeMailboxInfoList(response.data as List<dynamic>);
     }
-    
-    return AdminFrame.decodeMailboxInfoList(response.data as List<dynamic>);
+    return [for (final e in entries.cast<Map<String, dynamic>>()) MailboxInfo.fromListEntry(e, ownerId: host.id)];
   }
   
   /// Get detailed info about a specific mailbox

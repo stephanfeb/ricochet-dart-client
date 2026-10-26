@@ -7,7 +7,6 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:dart_libp2p/core/peer/peer_id.dart';
-import 'package:logging/logging.dart';
 
 /// Document frame encoding/decoding for SDA protocol
 class DocumentFrame {
